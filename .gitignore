@@ -1,0 +1,7 @@
+*.fasl
+*.fas
+*.lib
+*.x86f
+*.fasl
+*.core
+/.bundle/
