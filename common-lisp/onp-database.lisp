@@ -1,5 +1,6 @@
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (ql:quickload :cl-csv)
+  (ql:quickload :cl-ppcre)
   (ql:quickload :sqlite))
 
 ;; Constants for referencing items in a product row from catalog stream
@@ -79,11 +80,23 @@
   (load-delimited *impact-catalog* #\, ))
 
 
-;;; parse-raw-quantity : product-name -> string
-;;; Consumes a name field of a product struct and extracts
-;;; the product quantity.
+;;; extract-raw-quantity : product-name -> string or nil
+;;; Consumes a name field and returns a normalized string describing
+;;; the product's size/quantity, if the name expressesone at all.
+;;; Tries, in order, from most to least specific:
+;;;   1. A trailing parenthetical, e.g. "... (16 oz)" -> "16 oz"
+;;;   2. A weight-and-case-count combo that's split across two
+;;;      separated parts of the name, e.g.
+;;;      "2.8 oz, Chicken & Sweet Potato (Case of 24) Flavor"
+;;;      -> "2.8 oz Case of 24"
+;;;      3. Single regex patterns for the common standalone shapes:
+;;;         weight (oz/lb/Cup), count (ct/Count/pack/Piece Set/month
+;;;         supply/Case of N), and Size (Inch, N-N Inch).
+;;; Falling through to nil is a legitimate result -- some names
+;;; genuinely don't express a quantity ("100% Recycled", etc.) --
+;;; not a sign the extraction failed.
 
-(defun extract-raw-quantity (name)
+(defun extract-parenthetical-quantity (name)
   (let ((end (1- (length name))))
     (cond
       ((not (eq (aref name end) #\))) nil)
@@ -91,16 +104,59 @@
        (labels ((find-start (&optional (current end))
 		  (cond
 		    ((= current 0) nil)
-		    ((eq
-		      (aref name (1- current)) #\(
-		      )
-		     current)
-		    (T
-		     (find-start (1- current))))))
+		    ((eq (aref name (1- current)) #\() current)
+		    (T (find-start (1- current))))))
 	 (let ((start (find-start)))
 	   (if start
 	       (subseq name start end)
 	       nil)))))))
+
+(defun match (pattern string)
+  (multiple-value-bind (start end)
+      (cl-ppcre:scan pattern string)
+    (when start
+      (subseq string start end))))
+
+(defun extract-oz-case-quantity (name)
+  (let ((oz-pos (search " oz" name))
+	(case-pos (search "Case of" name)))
+    (when (and oz-pos case-pos)
+      (let* ((oz-start
+	       (or (position-if #'digit-char-p name :end oz-pos)
+		   oz-pos))
+	     (case-num-start
+	       (+ case-pos (length "Case of")))
+	     (case-num-start
+	       (or (position-if #'digit-char-p
+				name
+				:start case-num-start)
+		   case-num-start))
+	     (case-end
+	       (or (position-if-not #'digit-char-p
+				    name
+				    :start case-num-start)
+		   (length name))))
+	(format nil "~a ~a"
+		(subseq name oz-start (+ oz-pos 3))
+		(string-trim '(#\Space #\()
+			     (subseq name case-pos case-end)))))))
+
+(defun extract-quantity-candidate (name)
+  (or
+   (match "\\b[0-9]+(?:\\.[0-9]+)?\\s*(?:oz|lb|Cup)\\b" name)
+   (match "\\b[0-9]+\\s+Unscented\\s+Bags\\b" name)
+   (match "\\b[0-9]+(?:\\.[0-9]+)?\\s+Inch\\b" name)
+   (match "\\b[0-9]+\\s*(?:ct|Count)\\b" name)
+   (match "\\b[0-9]+\\s+[Pp]ack\\b" name)
+   (match "\\b[0-9]+\\s+Piece\\s+Set\\b" name)
+   (match "\\b[0-9]+\\s+[Mm]onth\\s+[Ss]upply\\b" name)
+   (match "\\b[Cc]ase\\s+of\\s+[0-9]+\\b" name)
+   (match "\\b[0-9]+-[0-9]+\\s+[Ii]nch\\b" name)))
+
+(defun extract-raw-quantity (name)
+  (or (extract-parenthetical-quantity name)
+      (extract-oz-case-quantity name)
+      (extract-quantity-candidate name)))		   
 
 
 ;;; row->product : row -> product
@@ -166,183 +222,6 @@
 
 ;;; List of product structs
 (defvar *products* (rows->products (cdr *impact-rows*)))
-
-
-;;; diagnostics to explore cases of nil in raw-data field
-
-(defun find-nils (products &optional (buggers nil))
-  (if (null products) (reverse buggers)
-      (cond
-	((null (product-raw-quantity (car products)))
-	 (find-nils (cdr products) (cons (car products) buggers)))
-	(T (find-nils (cdr products) buggers)))))
-
-
-(defparameter *buggers* (find-nils *products*))
-
-
-(defun partition (predicate list)
-  (let ((yes nil)
-	(no nil))
-    (dolist (item list)
-      (if (funcall predicate item)
-	  (push item yes)
-	  (push item no)))
-    (values (nreverse yes)
-	    (nreverse no))))
-
-(defparameter *buggers-with-numbers* nil)
-(defparameter *buggers-without-numbers* nil)
-
-(multiple-value-setq (*buggers-with-numbers*
-		      *buggers-without-numbers*)
-  (partition
-   (lambda (product)
-     (find-if #'digit-char-p (product-name product)))
-   *buggers*))
-
-
-(defun match (pattern string)
-  (multiple-value-bind (start end)
-      (cl-ppcre:scan pattern string)
-    (when start
-      (subseq string start end))))
-
-
-(defun extract-quantity-candidate (name)
-  (or
-   (match "\\b[0-9]+(?:\\.[0-9]+)?\\s*(?:oz|lb|Cup)\\b" name)
-   (match "\\b[0-9]+\\s+Unscented\\s+Bags\\b" name)
-   (match "\\b[0-9]+(?:\\.[0-9]+)?\\s+Inch\\b" name)
-   (match "\\b[0-9]+\\s*(?:ct|Count)\\b" name)
-   (match "\\b[0-9]+\\s+[Pp]ack\\b" name)
-   (match "\\b[0-9]+\\s+Piece\\s+Set\\b" name)
-   (match "\\b[0-9]+\\s+[Mm]onth\\s+[Ss]upply\\b" name)
-   (match "\\b[Cc]ase\\s+of\\s+[0-9]+\\b" name)
-   (match "\\b[0-9]+-[0-9]+\\s+[Ii]nch\\b" name)))
-
-
-(defparameter *quantity-candidates*
-  (remove-if-not
-   (lambda (p)
-     (extract-quantity-candidate (product-name p)))
-   *buggers-with-numbers*))
-
-(defparameter *quantity-unmatched*
-  (remove-if
-   (lambda (p)
-     (extract-quantity-candidate (product-name p)))
-   *buggers-with-numbers*))
-
-
-(defun find-oz-case (products)
-  (remove-if-not
-   (lambda (p)
-     (and (search " oz" (product-name p))
-          (search "Case of" (product-name p))))
-   products))
-
-(defun extract-oz-case-quantity (name)
-  (let ((oz-pos (search " oz" name))
-        (case-pos (search "Case of" name)))
-    (when (and oz-pos case-pos)
-      (list
-       ;; quantity before " oz"
-       (subseq name
-               (or (position-if
-                    (lambda (c)
-                      (or (digit-char-p c)
-                          (char= c #\.)))
-                    name :end oz-pos)
-                   oz-pos)
-               (+ oz-pos 3))
-       ;; "Case of N"
-       (let ((start (+ case-pos 8)))
-         (format nil "Case of ~a"
-                 (string-trim '(#\Space #\)) 
-                              (subseq name start
-                                      (or (position #\, name :start start)
-                                          (length name))))))))))
-
-(defun extract-oz-case (name)
-  (let ((oz-pos (search " oz" name))
-        (case-pos (search "Case of" name)))
-    (when (and oz-pos case-pos)
-      (let* ((oz-start
-               (or (position-if #'digit-char-p name :end oz-pos)
-                   oz-pos))
-             (case-num-start
-               (+ case-pos (length "Case of")))
-             (case-num-start
-               (or (position-if #'digit-char-p
-                                name
-                                :start case-num-start)
-                   case-num-start))
-             (case-end
-               (or (position-if-not #'digit-char-p
-                                     name
-                                     :start case-num-start)
-                   (length name))))
-        (format nil "~a ~a"
-                (subseq name oz-start (+ oz-pos 3))
-                (string-trim '(#\Space #\()
-                             (subseq name case-pos case-end)))))))
-
-
-
-;;: function calls
-
-;;(mapcar #'product-name *buggers-with-numbers*)
-;;(mapcar #'product-name *buggers-without-numbers*)
-
-#|
-;; weight
-N oz
-N lb
-Noz
-(N oz)
-(N oz bag)
-(N lb bag)
-(N lb Bag)
-N Cup
-
-;; count
-N Piece Set
-N Unscented Bags
-N pack
-N month supply
-Case of N
-N-N Inch
-N oz Bag
-(N Pack)
-N pack
-Nct
-N ct
-(N Count)
-
-;; weight and count
-Noz Case of N
-N oz Case of N
-N oz (Case of N)
-N oz ( Case of N)
-
-
-;; somewhat anomolous
-;; two items each with quantity
-"SPOT Cat Toys, Lattice Balls 4 Pack" "SPOT Cat Toys, Mylar Ball 4 Pack"
-;; non-quantity and quantity
-"NaturVet Hemp Shampoo & Conditioner 2-in-1 for Dogs, Argan & Coconut Oil 16 oz"
-;; weight and quantity but seperated
-"Nulo Signature Stew Small Breed Dog Food 2.8 oz, Chicken & Sweet Potato (Case of 24) Flavor"
-
-;; Non-quantity
-100% Recycled
-80's Classic
-"360 Pet Nutrition Freeze Dried Liver Treats for Dogs, Chicken Flavor"
-"Ruff Dawg K9 Flyer Rubber Flying Disc Dog Toy, K9 Junior Flyer, Assorted"
-
-|#
-;;; end diagnostic tools
 
 
 ;;; SQLite persistence
@@ -484,6 +363,8 @@ N oz ( Case of N)
 
 ;;; load-products-to-db : list-of products [db-path] -> nil
 ;;; Opens the database, ensures the schema exists, and inserts every product.
+;;; caller: (load-products-to-db *products*)
+
 (defun load-products-to-db (products &optional (db-path *db-path*))
   (sqlite:with-open-database (db db-path)
     (init-db db)

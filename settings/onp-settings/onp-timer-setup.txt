@@ -1,0 +1,22 @@
+Did: `mv update-onp.service ~/.config/systemd/user` and `mv update-onp.timer ~/.config/systemd/user`
+
+### Catalog Automation
+
+* Impact FTP credentials are stored in `~/.netrc` with `chmod 600`, allowing `ftp products.impact.com` to authenticate automatically.
+* ONP catalog metadata is available through `catalogs_info_file.xml`, including the remote catalog path and `lastUpdated` timestamp.
+* `update-onp.sh` checks the remote catalog timestamps against the local files.
+* It handles both:
+
+  * Google Merchant Center TXT
+  * Impact/RADIUS (IR) format
+* If unchanged, it does nothing.
+* If changed, it downloads the new catalog, archives/replaces the old data, and can trigger the Lisp database rebuild.
+* `systemd` runs the updater daily via `update-onp.timer`.
+* `systemctl --user enable --now update-onp.timer` enables and starts the timer.
+* `sudo loginctl enable-linger chris` lets the user-level timer continue running after logout.
+* `systemctl --user list-timers` verifies the schedule.
+* `systemctl --user start update-onp.service` runs the job immediately for testing.
+* `journalctl --user -u update-onp.service -f` follows its output.
+
+The test run succeeded: both catalogs were checked, found unchanged, and the service exited normally. The apparent “hang” was just `journalctl -f` continuously following the log; it doesn't exit by itself. Press **Ctrl-C** to return to the shell.
+

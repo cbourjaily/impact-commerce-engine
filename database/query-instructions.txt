@@ -2,7 +2,7 @@
 Example queries, for reference
 ---------------------------------------------------------------
 
-Run these from the sqlite3 CLI (`sqlite3 ../database/onp/onp.db`)
+Run these from the sqlite3 CLI (`sqlite3 onp.db`)
 or via sqlite:execute-to-list from Lisp.
  
 All discounted products, biggest discount first:

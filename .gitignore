@@ -5,3 +5,5 @@
 *.fasl
 *.core
 /.bundle/
+settings/local-docs/
+

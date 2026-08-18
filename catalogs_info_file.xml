@@ -1,0 +1,24 @@
+<catalogs>
+	<catalog>
+		<catalogId>32747</catalogId>
+		<name>Updated ONP Catalog</name>
+		<size>5 MB</size>
+		<format>GOOGLE TXT</format>
+		<numRecords>6856</numRecords>
+		<lastUpdated>2026-08-17T11:30:25-07:00</lastUpdated>
+		<location>/Only-Natural-Pet/Updated-ONP-Catalog_GOOGLE_TXT.txt.gz</location>
+		<advertiserId>6955634</advertiserId>
+		<campaignId>48318</campaignId>
+	</catalog>
+	<catalog>
+		<catalogId>32747</catalogId>
+		<name>Updated ONP Catalog</name>
+		<size>5 MB</size>
+		<format>IR</format>
+		<numRecords>6856</numRecords>
+		<lastUpdated>2026-08-17T11:30:25-07:00</lastUpdated>
+		<location>/Only-Natural-Pet/Updated-ONP-Catalog_IR.txt.gz</location>
+		<advertiserId>6955634</advertiserId>
+		<campaignId>48318</campaignId>
+	</catalog>
+</catalogs>
