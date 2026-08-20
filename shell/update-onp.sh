@@ -7,9 +7,9 @@ BASE_DIR="$HOME/git/misc/commerce-engine"
 DATA_DIR="$BASE_DIR/data/onp"
 ARCHIVE_DIR="$DATA_DIR/archive"
 LISP_DIR="$BASE_DIR/common-lisp"
-LISP_FILE="$LISP_DIR/onp-database.lisp"
+LISP_FILE="$LISP_DIR/onp/onp-db.lisp"
+CONVERTER_SCRIPT="$LISP_DIR/utilities/convert-ir-to-csv.lisp"
 
-CONVERTER_SCRIPT="$LISP_DIR/convert-ir-to-csv.lisp"
 
 TMP_DIR="$(mktemp -d)"
 cleanup() { rm -rf "$TMP_DIR"; }
@@ -49,7 +49,7 @@ fi
 INFO_XML="$TMP_DIR/catalogs_info_file.xml"
 
 ###############################################################################
-# sync_catalog : format-tag local-dir local-basename result-file -> writes
+# sync_catalog : format-tag catalog-name local-dir local-basename result-file -> writes
 #                1 or 0 to result-file
 ###############################################################################
 # Handles one <catalog> entry end to end: reads its <lastUpdated> and
@@ -61,20 +61,22 @@ INFO_XML="$TMP_DIR/catalogs_info_file.xml"
 
 sync_catalog() {
     local format_tag="$1"
-    local local_dir="$2"
-    local local_basename="$3"    # e.g. Updated-ONP-Catalog_IR.txt.gz
-    local result_file="$4"
+    local catalog_name="$2"
+    local local_dir="$3"
+    local local_basename="$4"    # e.g. Updated-ONP-Catalog_IR.txt.gz
+    local result_file="$5"
 
     local local_gz="$local_dir/$local_basename"
+    local local_txt="${local_gz%.gz}"
 
     local remote_timestamp
     remote_timestamp="$(xmllint --xpath \
-        "string(//catalog[format='${format_tag}']/lastUpdated)" \
+        "string(//catalog[format='${format_tag}' and name='${catalog_name}']/lastUpdated)" \
         "$INFO_XML")"
 
     local remote_location
     remote_location="$(xmllint --xpath \
-        "string(//catalog[format='${format_tag}']/location)" \
+        "string(//catalog[format='${format_tag}' and name='${catalog_name}']/location)" \
         "$INFO_XML")"
 
     if [[ -z "$remote_timestamp" || -z "$remote_location" ]]; then
@@ -124,11 +126,11 @@ EOF
     fi
 
     mkdir -p "$ARCHIVE_DIR"
-    if [[ -f "$local_gz" ]]; then
+    if [[ -f "$local_txt" ]]; then
         local archive_name
-        archive_name="$ARCHIVE_DIR/$(date -r "$local_gz" '+%Y%m%d-%H%M%S')-$local_basename"
+        archive_name="$ARCHIVE_DIR/$(date -r "$local_txt" '+%Y%m%d-%H%M%S')-$(basename "$local_txt")"
         echo "[$format_tag] archiving old catalog -> $archive_name"
-        mv "$local_gz" "$archive_name"
+        mv "$local_txt" "$archive_name"
     fi
 
     mv "$tmp_download" "$local_gz"
@@ -151,12 +153,12 @@ EOF
 GOOGLE_RESULT="$TMP_DIR/google-updated"
 IR_RESULT="$TMP_DIR/ir-updated"
 
-sync_catalog "GOOGLE TXT" \
+sync_catalog "GOOGLE TXT" "Updated ONP Catalog" \
     "$DATA_DIR/google-format" \
     "Updated-ONP-Catalog_GOOGLE_TXT.txt.gz" \
     "$GOOGLE_RESULT"
 
-sync_catalog "IR" \
+sync_catalog "IR" "Updated ONP Catalog" \
     "$DATA_DIR/impact-format" \
     "Updated-ONP-Catalog_IR.txt.gz" \
     "$IR_RESULT"
@@ -169,21 +171,29 @@ if [[ "$IR_UPDATED" != "1" ]]; then
 fi
 
 ###############################################################################
-# Convert IR .txt -> .csv, then rebuild the database
+# Produce a human-readable CSV (convenience only -- NOT required by
+# the database rebuild below, which reads the raw .txt directly).
+# A failure here is a warning, not a hard stop: this step exists so
+# there's something to open in a spreadsheet, not because anything
+# downstream depends on it succeeding.
 ###############################################################################
-# Only runs when IR specifically changed -- no point reconverting or
-# rebuilding off a Google-only update the Lisp side never reads.
 
 IR_TXT="$DATA_DIR/impact-format/Updated-ONP-Catalog_IR.txt"
 IR_CSV="$DATA_DIR/impact-format/Updated-ONP-Catalog_IR.csv"
 
-echo "Converting IR catalog to CSV..."
-sbcl --script "$CONVERTER_SCRIPT" "$IR_TXT" "$IR_CSV"
-
-if [[ ! -s "$IR_CSV" ]]; then
-    echo "ERROR: CSV conversion produced no output at $IR_CSV"
-    exit 1
+echo "Producing human-readable CSV..."
+if sbcl --script "$CONVERTER_SCRIPT" "$IR_TXT" "$IR_CSV"; then
+    echo "CSV written: $IR_CSV"
+else
+    echo "WARNING: CSV conversion failed -- continuing with database rebuild anyway."
 fi
+
+###############################################################################
+# Rebuild the database
+###############################################################################
+# Only runs when IR specifically changed -- no point rebuilding off a
+# Google-only update the Lisp side never reads. onp-db.lisp reads the
+# raw .txt directly -- independent of the CSV step above.
 
 echo "Rebuilding database..."
 cd "$LISP_DIR"

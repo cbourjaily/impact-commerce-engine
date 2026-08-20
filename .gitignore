@@ -6,4 +6,4 @@
 *.core
 /.bundle/
 settings/local-docs/
-
+catalogs_info_file.xml
