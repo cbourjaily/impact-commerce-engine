@@ -2,20 +2,35 @@
 
 #|
 Generic parsing for any catalog exported in Impact Radius (IR)
-Format -- Impact.com defines this as a fixed column schema, so
-the same layout applies across every merchant on the network, not
-just one retailer. Everything here is "read column N via a named
+format -- Impact.com defines this as a fixed column schema, so the
+same layout applies across every merchant on the network, not just
+one retailer. Everything here is "read column N via a named
 constant, transfer it onto a product struct slot" -- the
+repeatable part. What's NOT here: anything tuned to one retailer's
+product-naming conventions (e.g. ONP's oz/lb/Case-of quantity
+heuristics) or one retailer's file paths/name -- those stay in
+that retailer's own wrapper file, which calls into this one.
+
+Uses *common-lisp-dir* if already set by an entry file
+(catalogs.lisp/onp-db.lisp); falls back to self-locating if
+compiled/loaded standalone (e.g. C-c C-k in this buffer directly).
 |#
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (ql:quickload :cl-csv)
   (ql:quickload :cl-ppcre))
 
-(defparameter *impact-parser-dir*
-  (make-pathname :directory (pathname-directory *load-truename*)))
-
-(load (merge-pathnames "product.lisp" *impact-parser-dir*))
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (unless (boundp '*common-lisp-dir*)
+    ;; Not loaded as a dependency of catalogs.lisp/onp-db.lisp -- this
+    ;; file is being compiled/loaded directly (e.g. C-c C-k while
+    ;; sitting in this buffer). Fall back to self-locating: this file
+    ;; lives in common-lisp/throughput/, so its parent is common-lisp/.
+    (defparameter *common-lisp-dir*
+      (merge-pathnames "../"
+			(make-pathname :directory (pathname-directory
+						    (or *compile-file-truename* *load-truename*))))))
+  (load (merge-pathnames "product.lisp" *common-lisp-dir*)))
 
 
 ;; Column-index constants for the Impact Radius (IR) format. Verified
@@ -95,7 +110,7 @@ constant, transfer it onto a product struct slot" -- the
 
 
 ;;; normalize-launch-date : string -> string or nil
-;;; Consumes the feed's raw Product Launch Date in YYYMMDD form
+;;; Consumes the feed's raw Product Launch Date in YYYYMMDD form
 ;;; (e.g. "20260328") and returns it as an ISO-8601 date string
 ;;; ("2026-03-28"). Blank or malformed input returns nil.
 
@@ -110,7 +125,7 @@ constant, transfer it onto a product struct slot" -- the
 
 ;;; parse-labels : string -> list-of-string or nil
 ;;; Consumes the feed's raw comma-joined Labels field (e.g.
-;;; "Bag,Geunine Leather,Gift For Her") and splits it into a list of
+;;; "Bag,Genuine Leather,Gift For Her") and splits it into a list of
 ;;; individual label strings, trimmed of surrounding whitespace.
 ;;; Blank input returns nil.
 
@@ -121,9 +136,9 @@ constant, transfer it onto a product struct slot" -- the
 	      (cl-ppcre:split "," raw))))
 
 
-;;; fow-has-product-url? : row -> boolean
+;;; row-has-product-url? : row -> boolean
 ;;; product-url is the one field this whole pipeline can't function
-;; without. Rows missing it get skipped before a product struct is
+;;; without. Rows missing it get skipped before a product struct is
 ;;; ever built, rather than flowing through as a "valid" product
 ;;; carrying a nil url.
 
@@ -134,12 +149,12 @@ constant, transfer it onto a product struct slot" -- the
 ;;; row->product : row &key retailer raw-quantity-fn -> product
 ;;; Consumes an Impact-format catalog row and constructs a product
 ;;; struct. retailer and raw-quantity-fn are supplied by the caller
-;;; (each retailer's own wrapper).
+;;; (each retailer's own wrapper) rather than hardcoded here.
 ;;; raw-quantity-fn defaults to a function that always returns nil,
-;;; so callers that don't have quantity heuristics can omit safely.
+;;; so callers that don't have quantity heuristics can omit it safely.
 
 (defun row->product (row &key retailer
-			   (raw-quantity-fn (lambda (name) (declare (ignore name)) nil)))
+			       (raw-quantity-fn (lambda (name) (declare (ignore name)) nil)))
   (let* ((original-price (parse-number-or-nil (nth +original-price+ row)))
 	 (current-price (parse-number-or-nil (nth +current-price+ row)))
 	 (discount
@@ -193,11 +208,15 @@ constant, transfer it onto a product struct slot" -- the
 
 ;;; rows->products : rows &key retailer raw-quantity-fn -> list-of products
 ;;; Consumes a list of rows, converts each to a product struct via
-;;; row-product, threading retailer/raw-quantity-fn through to every
+;;; row->product, threading retailer/raw-quantity-fn through to every
 ;;; call, and returns the resulting products list. Rows with no
-;;; product-url are dropped before row-product ever runs.
+;;; product-url are dropped before row->product ever runs -- see
+;;; row-has-product-url? above for why that field specifically gets
+;;; gated rather than just nil-if-blank'd like everything else.
 
-(defun rows->products (rows &key retailer raw-quantity-fn (products nil) (skipped 0))
+(defun rows->products (rows &key retailer
+				  (raw-quantity-fn (lambda (name) (declare (ignore name)) nil))
+				  (products nil) (skipped 0))
   (cond
     ((null rows)
      (when (> skipped 0)
@@ -205,19 +224,19 @@ constant, transfer it onto a product struct slot" -- the
      (reverse products))
     ((not (row-has-product-url? (car rows)))
      (rows->products (cdr rows)
-		     :retailer retailer
-		     :raw-quantity-fn raw-quantity-fn
-		     :products products
-		     :skipped (1+ skipped)))
+		      :retailer retailer
+		      :raw-quantity-fn raw-quantity-fn
+		      :products products
+		      :skipped (1+ skipped)))
     (T
      (rows->products (cdr rows)
-		     :retailer retailer
-		     :raw-quantity-fn raw-quantity-fn
-		     :products (cons (row->product (car rows)
-						   :retailer retailer
-						   :raw-quantity-fn raw-quantity-fn)
-				     products)
-		     :skipped skipped))))
+		      :retailer retailer
+		      :raw-quantity-fn raw-quantity-fn
+		      :products (cons (row->product (car rows)
+						     :retailer retailer
+						     :raw-quantity-fn raw-quantity-fn)
+				       products)
+		      :skipped skipped))))
 
 
 ;;; get-indices : row -> list-of (index . value)

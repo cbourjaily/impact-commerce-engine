@@ -13,12 +13,17 @@ SQL machinery.
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (ql:quickload :sqlite))
-
-
-(defparameter *product-dir*
-  (make-pathname :directory (pathname-directory *load-truename*)))
-
-(load (merge-pathnames "db-builder.lisp" *product-dir*))
+ 
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (unless (boundp '*common-lisp-dir*)
+    ;; Not loaded as a dependency -- this file is being compiled/
+    ;; loaded directly. Fall back to self-locating: product.lisp
+    ;; lives directly in common-lisp/, so its own directory already
+    ;; IS *common-lisp-dir*, no ../ needed.
+    (defparameter *common-lisp-dir*
+      (make-pathname :directory (pathname-directory
+				  (or *compile-file-truename* *load-truename*)))))
+  (load (merge-pathnames "db-builder.lisp" *common-lisp-dir*)))
 
 
 ;;; product struct foreach productinstance to store in a database.
@@ -44,18 +49,18 @@ SQL machinery.
   description       ; given in html by stream
   product-type
   category
-  weight            ; Added on second iteration
-  shipping-weight   ; Added on second iteration
-  weight-unit       ; Added on second iteration
-  size              ; Added on second iteration
-  size-unit         ; Added on second iteration
+  weight            ; numeric, parsed
+  shipping-weight   ; numeric, parsed
+  weight-unit
+  size
+  size-unit
   raw-quantity      ; normalized size/quantity extracted from name
-  product-launch    ; Added on second iteration
+  product-launch    ; normalized ISO-8601 date string, or nil
   currency
-  labels            ; Added on second iteration
+  labels            ; list of strings -- own table, not a flat column
   sku
-  parent            ; Added on second iteration
-  parent-sku        ; Added on second iteration
+  parent
+  parent-sku
   retailer)
 
 
@@ -117,16 +122,16 @@ SQL machinery.
   (list
    (list "product_id" "INTEGER NOT NULL")
    (list "label" "TEXT NOT NULL")))
-
-
+ 
+ 
 (defparameter *create-products-sql*
   (columns->create-table-sql "products" *products-columns*
 			     (list "UNIQUE (retailer, sku)")))
-
+ 
 (defparameter *create-images-sql*
   (columns->create-table-sql "product_images" *images-columns*
 			     (list "FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE")))
-
+ 
 (defparameter *create-labels-sql*
   (columns->create-table-sql "product_labels" *labels-columns*
 			     (list "FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE")))
@@ -160,7 +165,7 @@ SQL machinery.
   (sqlite:execute-non-query db "CREATE INDEX IF NOT EXISTS idx_products_sku ON products(sku);")
   (sqlite:execute-non-query db "CREATE INDEX IF NOT EXISTS idx_images_product_id ON product_images(product_id);")
   (sqlite:execute-non-query db "CREATE INDEX IF NOT EXISTS idx_labels_product_id ON product_labels(product_id);")
-  (sqlite:execute-non-query db "CREATE INDEX IF NOT EXISTS idx_labels_label ON product_labels (label);"))
+  (sqlite:execute-non-query db "CREATE INDEX IF NOT EXISTS idx_labels_label ON product_labels(label);"))
 
 
 ;;; insert-product : sqlite-handle product -> nil
@@ -177,7 +182,7 @@ SQL machinery.
   (apply #'sqlite:execute-non-query db *insert-product-sql*
 	 (mapcar (lambda (col) (funcall (third col) product))
 		 *products-columns*))
-
+ 
   (let ((product-id (sqlite:last-insert-rowid db)))
     (loop for img in (product-alt-images product)
 	  for pos from 1

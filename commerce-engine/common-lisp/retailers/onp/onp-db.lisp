@@ -8,37 +8,24 @@ Radiius catilogs: the quantity-extraction heuristics and this
 retailer's file paths/names.
 |#
 
-(defparameter *onp-dir*
-  (make-pathname :directory (pathname-directory *load-truename*)))
-
-(load (merge-pathnames "../impact-parser.lisp" *onp-dir*))
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (defparameter *onp-dir*
+    (make-pathname :directory (pathname-directory
+				(or *compile-file-truename* *load-truename*))))
+  (defparameter *common-lisp-dir*
+    (merge-pathnames "../../" *onp-dir*))
+  (load (merge-pathnames "throughput/impact-parser.lisp" *common-lisp-dir*)))
 
 
 ;;; onp's Impact-format CSV catalog -- read directly from the raw
 ;;; tab-delimited feed. 
 (defparameter *onp-impact-catalog*
-  (merge-pathnames
-   "../../data/onp/impact-format/Updated-ONP-Catalog_IR.txt"
-   *onp-dir*))
-
-
-;;; load-delimited : filname delimiter -> list
-;;; Consumes a delimited file and delimter and processes the file
-;;; contents into a list.
-
-(defun load-delimited (filename delimiter)
-  (with-open-file (stream filename)
-    (loop
-      for row = (handler-case
-		    (cl-csv:read-csv-row stream :separator delimiter)
-		  (end-of-file () nil))
-	  while row
-	  collect row)))
+  (merge-pathnames "../../../data/onp/impact-format/Updated-ONP-Catalog_IR.txt" *onp-dir*))
 
 
 ;;; onp's loaded catalog rows
 (defparameter *onp-impact-rows*
-  (load-delimited *onp-impact-catalog* #\tab))
+  (load-delimited *onp-impact-catalog* #\Tab))
 
 
 ;;; extract-raw-quantity : product-name -> string or nil
@@ -71,13 +58,13 @@ retailer's file paths/names.
 	   (if start
 	       (subseq name start end)
 	       nil)))))))
-
+ 
 (defun match (pattern string)
   (multiple-value-bind (start end)
       (cl-ppcre:scan pattern string)
     (when start
       (subseq string start end))))
-
+ 
 (defun extract-oz-case-quantity (name)
   (let ((oz-pos (search " oz" name))
 	(case-pos (search "Case of" name)))
@@ -101,7 +88,7 @@ retailer's file paths/names.
 		(subseq name oz-start (+ oz-pos 3))
 		(string-trim '(#\Space #\()
 			     (subseq name case-pos case-end)))))))
-
+ 
 (defun extract-quantity-candidate (name)
   (or
    (match "\\b[0-9]+(?:\\.[0-9]+)?\\s*(?:oz|lb|Cup)\\b" name)
@@ -113,30 +100,36 @@ retailer's file paths/names.
    (match "\\b[0-9]+\\s+[Mm]onth\\s+[Ss]upply\\b" name)
    (match "\\b[Cc]ase\\s+of\\s+[0-9]+\\b" name)
    (match "\\b[0-9]+-[0-9]+\\s+[Ii]nch\\b" name)))
-
+ 
 (defun extract-raw-quantity (name)
   (or (extract-parenthetical-quantity name)
       (extract-oz-case-quantity name)
       (extract-quantity-candidate name)))
-
-
+ 
+ 
 ;;; onp's list of product structs -- built via the generic
-;;; rows->products, with ONP-s retailer name and quantity heuristic
+;;; rows->products, with ONP's retailer name and quantity heuristic
 ;;; passed in as the two retailer-specific pieces.
+ 
 (defvar *products*
   (rows->products (cdr *onp-impact-rows*)
-		  :retailer "Only Natural Pet"
-		  :raw-quantity-fn #'extract-raw-quantity))
+		   :retailer "Only Natural Pet"
+		   :raw-quantity-fn #'extract-raw-quantity))
 
 
 ;;; onp's database path -- overrides the nil placeholder declared in
 ;;; product.lisp.
+
 (defparameter *db-path*
-  (merge-pathnames "../../database/impact.db" *onp-dir*))
+  (merge-pathnames "../../../database/impact.db" *onp-dir*))
 
 
-;;; temp for getting indices for constant definitions
-(defun get-indices (row &optional (output nil) (index 0))
-  (cond
-    ((null row) (reverse output))
-    ((get-indices (cdr row) (cons (cons index (cons (car row) nil)) output) (1+ index)))))
+;;; load-onp : nil -> list-of failures
+;;; Wraps *products*/*db-path* (already bound above) in the same
+;;; calling convention as the generic retailers' load-* functions --
+;;; so ONP can be included alongside them in a manual full-refresh
+;;; without needing a special case for it.
+
+(defun load-onp ()
+  (load-products-to-db *products* *db-path*))
+

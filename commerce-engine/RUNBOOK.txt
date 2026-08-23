@@ -1,0 +1,134 @@
+commerce-engine -- manual operation
+
+===============================================================================
+RUN EVERYTHING (download + load every retailer)
+===============================================================================
+
+    cd ~/git/misc/commerce-engine
+    bash shell/update-onp.sh
+
+Checks every retailer's catalog against Impact's metadata, downloads
+and archives whatever changed, and reloads the database for any
+retailer whose catalog actually updated. Safe to run repeatedly --
+a retailer with no changes is skipped, not reloaded.
+
+Add -x for a full trace of every command (useful when debugging):
+
+    bash -x shell/update-onp.sh 2>&1 | tee /tmp/update-run.log
+
+
+===============================================================================
+RELOAD ONE RETAILER MANUALLY (no download, from whatever's on disk)
+===============================================================================
+
+ONP (has its own quantity-extraction parsing):
+
+    sbcl --non-interactive \
+         --load common-lisp/retailers/onp/onp-db.lisp \
+         --eval '(load-products-to-db *products*)'
+
+Any generic retailer (SinoCrafted, Terra, or a new one added the same way):
+
+    sbcl --non-interactive \
+         --load common-lisp/retailers/catalogs.lisp \
+         --eval '(load-sinocrafted)'
+
+    (swap load-sinocrafted for load-terra, or whatever load-* function
+    the new retailer defined)
+
+
+===============================================================================
+CHECK THE DATABASE
+===============================================================================
+
+    sqlite3 database/impact.db
+
+Inside that prompt:
+
+    .tables                          -- list tables
+    .schema products                 -- see the full products schema
+    .headers on
+    .mode column                     -- both make query output readable
+
+    SELECT COUNT(*) FROM products WHERE retailer = 'Only Natural Pet';
+    SELECT name, current_price FROM products ORDER BY discount_percent DESC LIMIT 10;
+
+    .quit                            -- or Ctrl-D
+
+
+===============================================================================
+ADD A NEW RETAILER
+===============================================================================
+
+No custom parsing needed (most retailers):
+    1. See the "TO ADD A GENERIC RETAILER" comment at the top of
+       shell/update-onp.sh.
+    2. See the top comment in common-lisp/retailers/catalogs.lisp.
+    Both together are the whole cost of onboarding one.
+
+Needs custom parsing (e.g. quantity extraction like ONP's):
+    Give it its own wrapper file, using
+    common-lisp/retailers/onp/onp-db.lisp as the template, plus its
+    own sync_catalog call(s) in shell/update-onp.sh near ONP's own.
+
+
+===============================================================================
+PRODUCE A HUMAN-READABLE CSV FOR ONE CATALOG (manual, on demand)
+===============================================================================
+
+Not part of the automated pipeline -- just a convenience for opening
+a catalog in a spreadsheet.
+
+    sbcl --script common-lisp/utilities/convert-ir-to-csv.lisp \
+         path/to/Some-Catalog_IR.txt \
+         path/to/output.csv
+
+
+===============================================================================
+FILE LAYOUT
+===============================================================================
+
+    common-lisp/
+      db-builder.lisp              generic SQL-from-column-spec machinery
+      product.lisp                 product struct + SQLite persistence
+      throughput/
+        impact-parser.lisp         generic Impact Radius (IR) format parsing
+      retailers/
+        catalogs.lisp               generic retailers (no custom parsing)
+        onp/
+          onp-db.lisp               ONP -- has its own quantity-extraction parsing
+      utilities/
+        convert-ir-to-csv.lisp     manual CSV export, not used by the pipeline
+
+    data/
+      catalogs_info_file.xml       current catalog metadata from Impact
+      archive/
+        catalogs_info/             archived old metadata snapshots
+        onp/  sinocrafted/  terra/   archived old catalog files, one dir per retailer
+      onp/impact-format/           ONP's current catalog files
+      sinocrafted/impact-format/   SinoCrafted's current catalog files
+      terra/impact-format/         Terra's current catalog files
+
+    database/
+      impact.db                    the shared SQLite database -- every retailer
+                                    writes here; (retailer, sku) keeps rows apart
+
+    shell/
+      update-onp.sh                 the automation script -- see RUN EVERYTHING above
+
+
+===============================================================================
+IF SOMETHING BREAKS AFTER A SCHEMA CHANGE
+===============================================================================
+
+Adding/renaming a column in product.lisp's *products-columns* does
+NOT modify an existing database/impact.db -- CREATE TABLE IF NOT
+EXISTS is a no-op if the table already exists, old schema and all.
+If you see "no such column" errors after changing the schema:
+
+    rm database/impact.db
+    bash shell/update-onp.sh
+
+This rebuilds the database from scratch with the current schema.
+There is no migration path -- delete and rebuild is the whole story
+for a project at this size.
