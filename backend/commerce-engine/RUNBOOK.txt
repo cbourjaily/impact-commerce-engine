@@ -4,7 +4,7 @@ commerce-engine -- manual operation
 RUN EVERYTHING (download + load every retailer)
 ===============================================================================
 
-    cd ~/git/misc/commerce-engine
+    cd ~/git/misc/thuida/backend/commerce-engine
     bash shell/update-onp.sh
 
 Checks every retailer's catalog against Impact's metadata, downloads
@@ -79,9 +79,28 @@ PRODUCE A HUMAN-READABLE CSV FOR ONE CATALOG (manual, on demand)
 Not part of the automated pipeline -- just a convenience for opening
 a catalog in a spreadsheet.
 
+If the catalog already went through shell/update-onp.sh, the .txt
+already exists and you can skip straight to the sbcl step. If it's a
+new catalog you've dropped in manually (still gzipped, e.g. a new
+retailer's data/<name>/Imported-Shopify-Catalog_IR.txt.gz), extract
+it first:
+
+    cd ~/git/misc/thuida/backend/commerce-engine
+    gunzip -k data/<retailer-dir>/Imported-Shopify-Catalog_IR.txt.gz
+
+    (-k keeps the .gz around instead of deleting it)
+
+Then, either way:
+
     sbcl --script common-lisp/utilities/convert-ir-to-csv.lisp \
          path/to/Some-Catalog_IR.txt \
          path/to/output.csv
+
+Example, for the arcn-home catalog above:
+
+    sbcl --script common-lisp/utilities/convert-ir-to-csv.lisp \
+         data/arcn-home/Imported-Shopify-Catalog_IR.txt \
+         data/arcn-home/Imported-Shopify-Catalog_IR.csv
 
 
 ===============================================================================

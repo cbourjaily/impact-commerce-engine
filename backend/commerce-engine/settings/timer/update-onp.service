@@ -3,6 +3,6 @@ Description=Update ONP catalog and rebuild database
 
 [Service]
 Type=oneshot
-ExecStart=%h/git/misc/commerce-engine/shell/update-onp.sh
+ExecStart=%h/git/misc/thuida/backend/commerce-engine/shell/update-onp.sh
 # journalctl --user -u update-onp.service captures stdout/stderr
 # automatically -- no need to redirect to a log file by hand.

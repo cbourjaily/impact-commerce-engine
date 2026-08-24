@@ -29,7 +29,7 @@
 set -euo pipefail
 
 HOST="products.impact.com"
-BASE_DIR="$HOME/git/misc/commerce-engine"
+BASE_DIR="$HOME/git/misc/thuida/backend/commerce-engine"
 DATA_ROOT="$BASE_DIR/data"
 ONP_DATA_DIR="$DATA_ROOT/onp"
 ARCHIVE_ROOT="$DATA_ROOT/archive"    # one subdir per retailer, not nested inside each retailer's own dir
@@ -302,3 +302,4 @@ for entry in "${GENERIC_RETAILERS[@]}"; do
 done
 
 echo "All catalog updates complete."
+exit 0
