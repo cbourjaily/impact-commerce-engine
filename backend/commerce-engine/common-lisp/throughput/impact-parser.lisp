@@ -55,6 +55,7 @@ compiled/loaded standalone (e.g. C-c C-k in this buffer directly).
 (defconstant +parent-sku+ 20)
 (defconstant +parent+ 21)
 (defconstant +color+ 25)
+(defconstant +material+ 26)
 (defconstant +size+ 27)
 (defconstant +size-unit+ 28)
 (defconstant +product-launch+ 33)
@@ -179,6 +180,7 @@ compiled/loaded standalone (e.g. C-c C-k in this buffer directly).
      :discount-percent discount-percent
      :condition (nil-if-blank (nth +condition+ row))
      :color (nil-if-blank (nth +color+ row))
+     :material (nil-if-blank (nth +material+ row))
      :available? avail
      :product-url (nth +product-url+ row)
      :image-url (nil-if-blank (nth +image-url+ row))

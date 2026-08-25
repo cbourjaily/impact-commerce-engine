@@ -133,3 +133,10 @@ retailer's file paths/names.
 (defun load-onp ()
   (load-products-to-db *products* *db-path*))
 
+
+;;; Diagnostic function
+
+(defun get-indices (row &optional (output nil) (index 0))
+  (cond
+    ((null row) (reverse output))
+    (T (get-indices (cdr row) (cons (cons index (car row)) output) (1+ index)))))

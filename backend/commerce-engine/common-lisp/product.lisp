@@ -26,7 +26,7 @@ SQL machinery.
   (load (merge-pathnames "db-builder.lisp" *common-lisp-dir*)))
 
 
-;;; product struct foreach productinstance to store in a database.
+;;; product struct foreach product instance to store in a database.
 ;;; Whichever parser builds a product is responsible for setting
 ;;; :retailer explicitly.
 
@@ -42,6 +42,7 @@ SQL machinery.
   discount-percent  ; discount / original-price * 100 (derived value)
   condition         ; i.e., "New"
   color             ; i.e, "Natural"
+  material
   available?        ; t or nil
   product-url
   image-url
@@ -84,6 +85,7 @@ SQL machinery.
    (list "discount_percent" "REAL" #'product-discount-percent)
    (list "condition" "TEXT" #'product-condition)
    (list "color" "TEXT" #'product-color)
+   (list "material" "TEXT" #'product-material)
    (list "available" "INTEGER" (lambda (p) (if (product-available? p) 1 0)))
    (list "product_url" "TEXT" #'product-product-url)
    (list "image_url" "TEXT" #'product-image-url)
