@@ -29,7 +29,20 @@
 set -euo pipefail
 
 HOST="products.impact.com"
-BASE_DIR="$HOME/git/misc/thuida/backend/commerce-engine"
+
+# Self-locating rather than a hardcoded absolute path -- a fixed
+# "$HOME/git/misc/thuida/..." path only ever works on the ONE machine
+# it was written for. This resolves relative to wherever the SCRIPT
+# ITSELF actually lives on disk: BASH_SOURCE is this file's own path
+# regardless of what directory you were in when you ran it or how you
+# invoked it (bash shell/update-onp.sh, ./update-onp.sh from inside
+# shell/, an absolute path from a systemd unit -- all work correctly
+# the same way), dirname gets the shell/ directory containing it, and
+# /.. goes up one level to commerce-engine/. This is exactly the
+# problem that broke deployment onto a fresh machine: cloned into
+# ~/thuida instead of ~/git/misc/thuida, and the old hardcoded path
+# pointed at a directory that simply didn't exist there.
+BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DATA_ROOT="$BASE_DIR/data"
 ONP_DATA_DIR="$DATA_ROOT/onp"
 ARCHIVE_ROOT="$DATA_ROOT/archive"    # one subdir per retailer, not nested inside each retailer's own dir
