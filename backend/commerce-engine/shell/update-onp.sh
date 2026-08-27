@@ -25,6 +25,15 @@
 # common-lisp/retailers/onp/onp-db.lisp as the template, and its own
 # sync_catalog call(s) down near ONP's, rather than an entry in
 # GENERIC_RETAILERS.
+#
+# Every Lisp invocation below goes through `ros run`, not plain
+# `sbcl` -- confirmed necessary the hard way, deploying to a fresh
+# machine. A traditional SBCL install auto-loads Quicklisp via
+# ~/.sbclrc; a Roswell-managed SBCL (what app.lisp itself requires)
+# does not expose a plain `sbcl` with that same auto-load behavior --
+# calling bare `sbcl --load` on this kind of setup fails with
+# "Package QL does not exist" the moment anything tries to
+# ql:quickload. `ros run` is the confirmed-working equivalent.
 
 set -euo pipefail
 
@@ -62,7 +71,7 @@ trap cleanup EXIT
 # watching the output live.
 ###############################################################################
 
-for cmd in ftp xmllint sbcl gunzip; do
+for cmd in ftp xmllint ros gunzip; do
     if ! command -v "$cmd" >/dev/null 2>&1; then
         echo "ERROR: required command '$cmd' not found on PATH."
         [[ "$cmd" == "xmllint" ]] && echo "  Install with: sudo apt install libxml2-utils"
@@ -259,8 +268,15 @@ if [[ "$ONP_IR_UPDATED" == "1" ]]; then
     # Human-readable CSV -- convenience only, NOT required by the
     # database rebuild below, which reads the raw .txt directly. A
     # failure here is a warning, not a hard stop.
+    #
+    # UNVERIFIED: the -- arg-passing syntax below is my best
+    # understanding of how ros forwards positional arguments through
+    # to a loaded script, but it hasn't been confirmed working the
+    # way the --eval-based calls below have. Low risk to test live --
+    # this whole step already degrades to a warning, not a failure,
+    # if it's wrong.
     echo "[ONP] producing human-readable CSV..."
-    if sbcl --script "$CONVERTER_SCRIPT" "$ONP_IR_TXT" "$ONP_IR_CSV"; then
+    if ros --load "$CONVERTER_SCRIPT" -- "$ONP_IR_TXT" "$ONP_IR_CSV"; then
         echo "[ONP] CSV written: $ONP_IR_CSV"
     else
         echo "[ONP] WARNING: CSV conversion failed -- continuing with database rebuild anyway."
@@ -268,9 +284,10 @@ if [[ "$ONP_IR_UPDATED" == "1" ]]; then
 
     echo "[ONP] rebuilding database..."
     cd "$LISP_DIR"
-    sbcl --non-interactive \
+    ros run \
          --load "$ONP_LISP_FILE" \
-         --eval '(load-products-to-db *products*)'
+         --eval '(load-products-to-db *products*)' \
+         --quit
 
     echo "[ONP] catalog update complete."
 else
@@ -309,9 +326,10 @@ for entry in "${GENERIC_RETAILERS[@]}"; do
 
     echo "[$display_label] loading into database..."
     cd "$LISP_DIR"
-    sbcl --non-interactive \
+    ros run \
          --load "$CATALOGS_LISP" \
-         --eval "($load_fn)"
+         --eval "($load_fn)" \
+         --quit
 done
 
 echo "All catalog updates complete."
