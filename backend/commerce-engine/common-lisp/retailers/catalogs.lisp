@@ -61,6 +61,73 @@ patern.
   (load-catalog "Terra" *terra-catalog*))
 
 
+;;; ARCN Home
+
+(defparameter *arcn-home-catalog*
+  (merge-pathnames "../../data/arcn-home/impact-format/Updated-arcn-home_IR.txt"
+		    *catalogs-dir*))
+
+(defun load-arcn-home ()
+  (load-catalog "ARCN Home" *arcn-home-catalog*))
+
+
+;;; ANRAN
+
+(defparameter *anran-catalog*
+  (merge-pathnames "../../data/anran/impact-format/Updated-anran_IR.txt"
+		    *catalogs-dir*))
+
+(defun load-anran ()
+  (load-catalog "ANRAN" *anran-catalog*))
+
+
+;;; Dr. Jojo Vitamins
+
+(defparameter *dr-jojo-vitamins-catalog*
+  (merge-pathnames "../../data/dr-jojo-vitamins/impact-format/Updated-dr-jojo-vitamins_IR.txt"
+		    *catalogs-dir*))
+
+(defun load-dr-jojo-vitamins ()
+  (load-catalog "Dr. Jojo Vitamins" *dr-jojo-vitamins-catalog*))
+
+
+;;; Varla -- Impact directory is "Varla-Amazon" (Amazon-sourced
+;;; catalog, unlike the Shopify-sourced ones above/below), but the
+;;; retailer itself is just Varla -- dir-name kept as varla-amazon
+;;; to match the shell script's GENERIC_RETAILERS entry exactly.
+
+(defparameter *varla-amazon-catalog*
+  (merge-pathnames "../../data/varla-amazon/impact-format/Updated-varla-amazon_IR.txt"
+		    *catalogs-dir*))
+
+(defun load-varla-amazon ()
+  (load-catalog "Varla" *varla-amazon-catalog*))
+
+
+;;; DOWAN -- Impact's own directory name includes Chinese characters
+;;; (DOWAN-LLC-内容产出者); dir-name here is plain ASCII ("dowan") by
+;;; deliberate choice, since this is OUR OWN local storage naming,
+;;; not something that needs to match Impact's remote directory
+;;; structure.
+
+(defparameter *dowan-catalog*
+  (merge-pathnames "../../data/dowan/impact-format/Updated-dowan_IR.txt"
+		    *catalogs-dir*))
+
+(defun load-dowan ()
+  (load-catalog "DOWAN" *dowan-catalog*))
+
+
+;;; DNT Optics
+
+(defparameter *dnt-optics-catalog*
+  (merge-pathnames "../../data/dnt-optics/impact-format/Updated-dnt-optics_IR.txt"
+		    *catalogs-dir*))
+
+(defun load-dnt-optics ()
+  (load-catalog "DNT Optics" *dnt-optics-catalog*))
+
+
 ;;; load-all-generic-catalogs : nil -> nil
 ;;; Convenience for loading every retailer in this file in one call --
 ;;; handy for a manual full-refresh from the REPL. The cron script
@@ -70,4 +137,10 @@ patern.
 (defun load-all-generic-catalogs ()
   (load-sinocrafted)
   (load-terra)
+  (load-arcn-home)
+  (load-anran)
+  (load-dr-jojo-vitamins)
+  (load-varla-amazon)
+  (load-dowan)
+  (load-dnt-optics)
   nil)

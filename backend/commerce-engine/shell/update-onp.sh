@@ -306,6 +306,12 @@ GENERIC_RETAILERS=(
     # both share ("Imported Shopify Catalog") and would collide on.
     "7479390|SinoCrafted|sinocrafted|load-sinocrafted"
     "7452908|Terra|terra|load-terra"
+    "7368301|ARCN Home|arcn-home|load-arcn-home"
+    "7599876|ANRAN|anran|load-anran"
+    "7650847|Dr. Jojo Vitamins|dr-jojo-vitamins|load-dr-jojo-vitamins"
+    "7430394|Varla|varla-amazon|load-varla-amazon"
+    "7167120|DOWAN|dowan|load-dowan"
+    "7225567|DNT Optics|dnt-optics|load-dnt-optics"
 )
 
 for entry in "${GENERIC_RETAILERS[@]}"; do

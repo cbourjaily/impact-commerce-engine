@@ -199,75 +199,30 @@ SQL machinery.
 					 product-id label))))
 
 
-;;; *excluded-categories* : list of string
-;;; Categories that never belong in the catalog regardless of
-;;; retailer -- checkout add-ons/service items that come through
-;;; retailer feeds tagged as if they were real products (shipping
-;;; insurance, purchase protection, etc), not anything a shopper
-;;; would search for or want to see as a search result. Confirmed
-;;; directly, not guessed: SEEL-WFP (Seel's "Worry-Free Purchase"
-;;; protection, SinoCrafted) and shipping-protection (xCotton's
-;;; shipping insurance, also SinoCrafted, riding along under a
-;;; misleading "xcotton" brand tag that isn't a real product brand
-;;; at all -- confirmed directly: filtering to brand=xcotton alone
-;;; returns 99 results, 100% of them this same junk).
-;;;
-;;; Checked ONCE here, not per-retailer -- this is the one
-;;; chokepoint every retailer's pipeline funnels through (generic
-;;; retailers AND ONP's own custom pipeline both call
-;;; load-products-to-db directly), so adding a category here
-;;; excludes it automatically for every current AND future retailer,
-;;; with no per-retailer logic needed. Add a category string here
-;;; whenever something like this shows up again -- that's the whole
-;;; cost of extending this.
-;;;
-;;; Exact string match against the category column as stored -- both
-;;; confirmed junk categories are flat values with no breadcrumb
-;;; nesting (unlike a normal product's "A > B > C" category), so this
-;;; is correct for what's actually been seen. If a future junk
-;;; category ever shows up NESTED inside a real breadcrumb instead of
-;;; as a flat value, exact match won't catch it -- worth knowing, not
-;;; yet a real problem since nothing like that has occurred.
-
-(defparameter *excluded-categories*
-  '("SEEL-WFP" "shipping-protection"))
-
-
 ;;; load-products-to-db : list-of products [db-path] -> list-of failures
 ;;; Opens the database, ensures the schema exists, and inserts every
-;;; product NOT in *excluded-categories* (see that variable's own
-;;; comment for why the filter lives here). Excluded products are
-;;; counted and logged SEPARATELY from failures below -- being
-;;; filtered out on purpose is not the same thing as a row failing
-;;; to insert, and conflating the two in the log would make a
-;;; correctly-working exclusion look like something went wrong.
-;;;
-;;; A single row failing (e.g. a NOT NULL violation on name or sku
-;;; after nil-if-blank turned an empty string into a real nil)
-;;; doesn't abort the whole load -- handler-case catches inside the
-;;; dolist body, so with-transaction never sees an unhandled
+;;; product. A single row failing (e.g. a NOT NULL violation on name
+;;; or sku after nil-if-blank turned an empty string into a real nil)
+;;; doesn't abort the whole load -- handler-case catches in inside
+;;; the dolist body, so with-transaction never sees an unhandled
 ;;; condition and still commits everything that DID succeed. Returns
 ;;; the list of (product . condition) failures so the caller can
 ;;; inspect what got skipped and why, in addition to the printed log.
 
 (defun load-products-to-db (products &optional (db-path *db-path*))
-  (let* ((included (remove-if (lambda (p) (member (product-category p) *excluded-categories* :test #'string=))
-			       products))
-	 (excluded-count (- (length products) (length included)))
-	 (failures nil))
+  (let ((failures nil))
     (sqlite:with-open-database (db db-path)
       (init-db db)
       (sqlite:with-transaction db
-	(dolist (p included)
+	(dolist (p products)
 	  (handler-case
 	      (insert-product db p)
 	    (error (e)
 	      (push (cons p e) failures)
 	      (format t "~&SKIPPED product (retailer=~a sku=~a name=~a): ~a~%"
 		      (product-retailer p) (product-sku p) (product-name p) e))))))
-    (format t "~&Loaded ~a products into ~a (~a skipped, ~a excluded by category filter)~%"
-	    (- (length included) (length failures))
+    (format t "~&Loaded ~a products into ~a (~a skipped)~%"
+	    (- (length products) (length failures))
 	    db-path
-	    (length failures)
-	    excluded-count)
+	    (length failures))
     (nreverse failures)))
