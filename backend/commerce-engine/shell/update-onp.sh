@@ -312,6 +312,61 @@ GENERIC_RETAILERS=(
     "7430394|Varla|varla-amazon|load-varla-amazon"
     "7167120|DOWAN|dowan|load-dowan"
     "7225567|DNT Optics|dnt-optics|load-dnt-optics"
+    # --- batch added 2026-08-28 -- 44 retailers below.
+    # 11 of these have MORE THAN ONE catalog entry under the same
+    # advertiserId in Impact's metadata (multiple product-type or
+    # regional splits, same pattern GOLF Partner shows most visibly
+    # at 7 entries) -- sync_catalog's XPath only ever resolves to
+    # the FIRST matching entry for a given advertiserId, so these
+    # specific retailers will sync correctly but only capture ONE
+    # of their several files, not the full combined catalog. Not a
+    # crash, not silent data corruption -- just partial coverage.
+    # Flagged inline below on each one it applies to. Building real
+    # multi-file support (the Joom problem, at smaller scale) is a
+    # separate task, not done here.
+    "6675705|Margovil|margovil|load-margovil"
+    "98634|Venus Swim|venus-swim|load-venus-swim"
+    "7001503|Stuhrling Original|stuhrling-original|load-stuhrling-original"
+    "7033143|Whiskey Darling|whiskey-darling|load-whiskey-darling"  # MULTI-ENTRY, partial coverage -- see note above
+    "7450311|RVCA|rvca|load-rvca"
+    "3596386|GOLF Partner|golf-partner|load-golf-partner"  # MULTI-ENTRY, partial coverage -- see note above
+    "3565235|Brxl|brxl|load-brxl"
+    "7091135|ArtZ Miami|artz-miami|load-artz-miami"
+    "7114321|SELFWHO|selfwho|load-selfwho"
+    "7599035|Alorair|alorair|load-alorair"  # MULTI-ENTRY, partial coverage -- see note above
+    "7099710|Tetote Home|tetote-home|load-tetote-home"  # MULTI-ENTRY, partial coverage -- see note above
+    "6268289|Easecoo|easecoo|load-easecoo"
+    "4292131|RedTop|redtop|load-redtop"
+    "7388520|Magic John|magic-john|load-magic-john"
+    "7417719|Tuttiosport|tuttiosport|load-tuttiosport"
+    "5252685|Rave Sports|rave-sports|load-rave-sports"  # MULTI-ENTRY, partial coverage -- see note above
+    "7459432|Belela|belela|load-belela"  # MULTI-ENTRY, partial coverage -- see note above
+    "5432839|EGOHOME Mattress|egohome-mattress|load-egohome-mattress"
+    "7092833|OutIn|outin|load-outin"  # MULTI-ENTRY, partial coverage -- see note above
+    "7339666|AOOCCI International|aoocci-international|load-aoocci-international"  # MULTI-ENTRY, partial coverage -- see note above
+    "3195031|GoldClub Direct|goldclub-direct|load-goldclub-direct"
+    "7121451|Haoqiebike|haoqiebike|load-haoqiebike"
+    "7465628|Screaming O|screaming-o|load-screaming-o"  # MULTI-ENTRY, partial coverage -- see note above
+    "7356227|Tisscare|tisscare|load-tisscare"
+    "7422298|Plantifique|plantifique|load-plantifique"  # MULTI-ENTRY, partial coverage -- see note above
+    "4292160|Dreame Yardcare|dreame-yardcare|load-dreame-yardcare"  # MULTI-ENTRY, partial coverage -- see note above
+    "7348810|HK Beirui Trade|hk-beirui-trade|load-hk-beirui-trade"
+    "7446714|SunnyFeel|sunnyfeel|load-sunnyfeel"
+    "7332624|Upartner Technology|upartner-technology|load-upartner-technology"
+    "7400458|XTEINK|xteink|load-xteink"
+    "6897243|Jiehua International Trade|jiehua-international|load-jiehua-international"
+    "5428688|Fatboy Hair|fatboy-hair|load-fatboy-hair"
+    "3274582|Packed with Purpose|packed-with-purpose|load-packed-with-purpose"
+    "7371918|RunStar|runstar|load-runstar"
+    "7114959|Lilypad Paint|lilypad-paint|load-lilypad-paint"
+    "7364408|Aniioki eBikes|aniioki-ebikes|load-aniioki-ebikes"
+    "7193509|NuMe|nume|load-nume"
+    "7036290|Chef iQ|chef-iq|load-chef-iq"
+    "7510428|WiiM|wiim|load-wiim"
+    "7556796|Aigerri|aigerri|load-aigerri"
+    "000000|Example Retailer|example-retailer|load-example-retailer"
+    "7151050|Smart Fuel|smart-fuel|load-smart-fuel"
+    "7500620|Signal Ring|signal-ring|load-signal-ring"
 )
 
 for entry in "${GENERIC_RETAILERS[@]}"; do

@@ -17,9 +17,13 @@
 ;;; *known-advertiser-ids* is a SECOND source of truth, kept in sync
 ;;; with update-onp.sh BY HAND -- deliberately, not auto-derived.
 ;;; Parsing bash array syntax from Lisp is more fragile than it's
-;;; worth for a list this short; update this list yourself whenever
+;;; worth, even at 53+ entries; update this list yourself whenever
 ;;; you add a retailer to GENERIC_RETAILERS (or ONP's own id, if
-;;; that somehow ever changed).
+;;; that somehow ever changed). This list going stale is EXACTLY
+;;; what happened the first time this ran after the six-retailer
+;;; batch -- all six showed up as "new" again since nothing had
+;;; updated this list to match. Don't repeat that: update this list
+;;; in the SAME commit as any GENERIC_RETAILERS change, not later.
 ;;;
 ;;; Groups multiple <catalog> entries sharing the same advertiserId
 ;;; into ONE summary row with a TOTAL record count summed across all
@@ -46,9 +50,59 @@
 ;;; Keep in sync BY HAND with shell/update-onp.sh -- see file header
 ;;; comment above for why this isn't auto-derived.
 (defparameter *known-advertiser-ids*
-  (list "6955634"   ; ONP (custom-parsed)
-	"7479390"   ; SinoCrafted (generic)
-	"7452908")) ; Terra (generic)
+  (list "6955634" ; ONP (custom-parsed)
+	"7479390" ; SinoCrafted (generic)
+	"7452908" ; Terra (generic)
+	"7368301" ; ARCN Home (generic)
+	"7599876" ; ANRAN (generic)
+	"7650847" ; Dr. Jojo Vitamins (generic)
+	"7430394" ; Varla (generic)
+	"7167120" ; DOWAN (generic)
+	"7225567" ; DNT Optics (generic)
+	"6936056" ; Hongkong Ossilee Trading -- REJECTED, see catalogs.lisp
+	"6675705" ; Margovil (generic)
+	"98634" ; Venus Swim (generic)
+	"7001503" ; Stuhrling Original (generic)
+	"7033143" ; Whiskey Darling (generic)
+	"7450311" ; RVCA (generic)
+	"3596386" ; GOLF Partner (generic)
+	"3565235" ; Brxl (generic)
+	"7091135" ; ArtZ Miami (generic)
+	"7114321" ; SELFWHO (generic)
+	"7599035" ; Alorair (generic)
+	"7099710" ; Tetote Home (generic)
+	"6268289" ; Easecoo (generic)
+	"4292131" ; RedTop (generic)
+	"7388520" ; Magic John (generic)
+	"7417719" ; Tuttiosport (generic)
+	"5252685" ; Rave Sports (generic)
+	"7459432" ; Belela (generic)
+	"5432839" ; EGOHOME Mattress (generic)
+	"7092833" ; OutIn (generic)
+	"7339666" ; AOOCCI International (generic)
+	"3195031" ; GoldClub Direct (generic)
+	"7121451" ; Haoqiebike (generic)
+	"7465628" ; Screaming O (generic)
+	"7356227" ; Tisscare (generic)
+	"7422298" ; Plantifique (generic)
+	"4292160" ; Dreame Yardcare (generic)
+	"7348810" ; HK Beirui Trade (generic)
+	"7446714" ; SunnyFeel (generic)
+	"7332624" ; Upartner Technology (generic)
+	"7400458" ; XTEINK (generic)
+	"6897243" ; Jiehua International Trade (generic)
+	"5428688" ; Fatboy Hair (generic)
+	"3274582" ; Packed with Purpose (generic)
+	"7371918" ; RunStar (generic)
+	"7114959" ; Lilypad Paint (generic)
+	"7364408" ; Aniioki eBikes (generic)
+	"7193509" ; NuMe (generic)
+	"7036290" ; Chef iQ (generic)
+	"7510428" ; WiiM (generic)
+	"7556796" ; Aigerri (generic)
+	"000000" ; Example Retailer (generic)
+	"7151050" ; Smart Fuel (generic)
+	"7500620")) ; Signal Ring (generic)
 
 ;;; extract-field : tag block -> string or nil
 
