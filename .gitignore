@@ -11,4 +11,5 @@ impact-ftp-login.txt
 login.txt
 search-index.db
 backend/commerce-engine/database/*.db
+backend/commerce-engine/data/
 
