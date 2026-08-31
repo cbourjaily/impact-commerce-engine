@@ -34,10 +34,20 @@
 # calling bare `sbcl --load` on this kind of setup fails with
 # "Package QL does not exist" the moment anything tries to
 # ql:quickload. `ros run` is the confirmed-working equivalent.
+#
+# SKIP_ARCHIVE=1 bash shell/update-onp.sh disables archiving for
+# that run -- an old catalog file is simply replaced instead of
+# moved into data/archive/. Off by default, so the normal path (the
+# VM's daily timer, in particular) keeps archiving exactly as
+# originally designed; this is an opt-in switch for situations like
+# heavy local exploration/rebuild cycles, where re-running this
+# repeatedly would otherwise keep accumulating archived snapshots of
+# every intermediate catalog version nobody needs.
 
 set -euo pipefail
 
 HOST="products.impact.com"
+SKIP_ARCHIVE="${SKIP_ARCHIVE:-0}"
 
 # Self-locating rather than a hardcoded absolute path -- a fixed
 # "$HOME/git/misc/thuida/..." path only ever works on the ONE machine
@@ -112,9 +122,13 @@ INFO_XML_ARCHIVE_DIR="$ARCHIVE_ROOT/catalogs_info"
 
 mkdir -p "$INFO_XML_ARCHIVE_DIR"
 if [[ -f "$INFO_XML_CURRENT" ]]; then
-    archive_name="$INFO_XML_ARCHIVE_DIR/$(date -r "$INFO_XML_CURRENT" '+%Y%m%d-%H%M%S')-catalogs_info_file.xml"
-    echo "Archiving previous catalogs_info_file.xml -> $archive_name"
-    mv "$INFO_XML_CURRENT" "$archive_name"
+    if [[ "$SKIP_ARCHIVE" == "1" ]]; then
+        echo "Replacing previous catalogs_info_file.xml (SKIP_ARCHIVE set, not archiving)"
+    else
+        archive_name="$INFO_XML_ARCHIVE_DIR/$(date -r "$INFO_XML_CURRENT" '+%Y%m%d-%H%M%S')-catalogs_info_file.xml"
+        echo "Archiving previous catalogs_info_file.xml -> $archive_name"
+        mv "$INFO_XML_CURRENT" "$archive_name"
+    fi
 fi
 
 cp "$INFO_XML" "$INFO_XML_CURRENT"
@@ -205,10 +219,14 @@ EOF
     mkdir -p "$local_dir"
     mkdir -p "$archive_dir"
     if [[ -f "$local_txt" ]]; then
-        local archive_name
-        archive_name="$archive_dir/$(date -r "$local_txt" '+%Y%m%d-%H%M%S')-$(basename "$local_txt")"
-        echo "[$display_label] archiving old catalog -> $archive_name"
-        mv "$local_txt" "$archive_name"
+        if [[ "$SKIP_ARCHIVE" == "1" ]]; then
+            echo "[$display_label] replacing old catalog (SKIP_ARCHIVE set, not archiving)"
+        else
+            local archive_name
+            archive_name="$archive_dir/$(date -r "$local_txt" '+%Y%m%d-%H%M%S')-$(basename "$local_txt")"
+            echo "[$display_label] archiving old catalog -> $archive_name"
+            mv "$local_txt" "$archive_name"
+        fi
     fi
 
     mv "$tmp_download" "$local_gz"
@@ -217,6 +235,10 @@ EOF
     # -k keeps the .gz alongside the extracted file -- the .gz's mtime
     # is what next run's staleness check reads, so deleting it would
     # make every future run think there's no local catalog at all.
+    # -f overwrites the OLD .txt directly if one is still sitting
+    # there (SKIP_ARCHIVE case, where the old one was never moved
+    # aside) -- this is what actually replaces it, not a separate
+    # delete step.
     gunzip -k -f "$local_gz"
     echo "[$display_label] extracted: ${local_gz%.gz}"
 
