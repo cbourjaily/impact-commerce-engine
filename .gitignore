@@ -10,6 +10,8 @@ catalogs_info_file.xml
 impact-ftp-login.txt
 login.txt
 search-index.db
-backend/commerce-engine/database/*.db
-backend/commerce-engine/data/
+backend/database/*.db
+backend/data/
+*~
+\#*\#
 

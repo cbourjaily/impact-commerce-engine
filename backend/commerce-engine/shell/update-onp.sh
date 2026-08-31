@@ -3,6 +3,13 @@
 # Downloads and loads every retailer's catalog. Run manually or from
 # a timer -- see RUNBOOK.txt in the repo root for that setup.
 #
+# Generic engine -- no retailer is hardcoded into this script's own
+# logic. GENERIC_RETAILERS below currently holds exactly one sample
+# entry (Example Retailer), kept specifically so this can be run and
+# tested end to end without needing a full catalog set populated
+# first. A real project built on this engine adds its own retailers
+# here.
+#
 # TO ADD A GENERIC RETAILER (no custom parsing needed -- most
 # retailers): add ONE line to the GENERIC_RETAILERS array below.
 #   1. Find its advertiserId: after this script has run once,
@@ -10,21 +17,25 @@
 #        data/catalogs_info_file.xml
 #      lists every IR catalog on the account -- match yours by
 #      <location>, then read its <advertiserId> sibling. Don't use
-#      <name> -- it's not guaranteed unique (two retailers on this
-#      account already share the literal name "Imported Shopify
-#      Catalog").
+#      <name> -- it's not guaranteed unique (an account can have
+#      more than one retailer sharing the literal name "Imported
+#      Shopify Catalog").
 #   2. Add "advertiserId|Display Name|dir-name|load-fn" to
 #      GENERIC_RETAILERS.
 #   3. Add the matching retailer to common-lisp/retailers/catalogs.lisp
-#      (one defparameter + one defun, see that file's own top comment).
+#      (one defparameter + one defun, see that file's own top comment
+#      and its Example Retailer entry for the pattern to copy).
 # That's the whole cost -- no directory needs to exist beforehand,
 # no other part of this script needs to change.
 #
-# TO ADD A RETAILER THAT NEEDS CUSTOM PARSING (like ONP's quantity
-# extraction): it needs its own dedicated wrapper file, following
-# common-lisp/retailers/onp/onp-db.lisp as the template, and its own
-# sync_catalog call(s) down near ONP's, rather than an entry in
-# GENERIC_RETAILERS.
+# TO ADD A RETAILER THAT NEEDS CUSTOM PARSING (quantity extraction,
+# non-standard fields, etc): it needs its own dedicated wrapper file
+# (its own product-building logic, its own sync_catalog call(s) in
+# its own section here, separate from GENERIC_RETAILERS) rather than
+# an entry in that array. No concrete example currently lives in
+# this stripped-down engine to copy directly -- follow the general
+# shape (own file, own variables, own sync_catalog calls, own
+# if-block) rather than a specific template.
 #
 # Every Lisp invocation below goes through `ros run`, not plain
 # `sbcl` -- confirmed necessary the hard way, deploying to a fresh
@@ -37,12 +48,12 @@
 #
 # SKIP_ARCHIVE=1 bash shell/update-onp.sh disables archiving for
 # that run -- an old catalog file is simply replaced instead of
-# moved into data/archive/. Off by default, so the normal path (the
-# VM's daily timer, in particular) keeps archiving exactly as
-# originally designed; this is an opt-in switch for situations like
-# heavy local exploration/rebuild cycles, where re-running this
-# repeatedly would otherwise keep accumulating archived snapshots of
-# every intermediate catalog version nobody needs.
+# moved into data/archive/. Off by default, so the normal path (a
+# daily timer, in particular) keeps archiving exactly as originally
+# designed; this is an opt-in switch for situations like heavy local
+# exploration/rebuild cycles, where re-running this repeatedly would
+# otherwise keep accumulating archived snapshots of every
+# intermediate catalog version nobody needs.
 
 set -euo pipefail
 
@@ -50,24 +61,23 @@ HOST="products.impact.com"
 SKIP_ARCHIVE="${SKIP_ARCHIVE:-0}"
 
 # Self-locating rather than a hardcoded absolute path -- a fixed
-# "$HOME/git/misc/thuida/..." path only ever works on the ONE machine
-# it was written for. This resolves relative to wherever the SCRIPT
-# ITSELF actually lives on disk: BASH_SOURCE is this file's own path
-# regardless of what directory you were in when you ran it or how you
-# invoked it (bash shell/update-onp.sh, ./update-onp.sh from inside
-# shell/, an absolute path from a systemd unit -- all work correctly
-# the same way), dirname gets the shell/ directory containing it, and
-# /.. goes up one level to commerce-engine/. This is exactly the
-# problem that broke deployment onto a fresh machine: cloned into
-# ~/thuida instead of ~/git/misc/thuida, and the old hardcoded path
-# pointed at a directory that simply didn't exist there.
-BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DATA_ROOT="$BASE_DIR/data"
-ONP_DATA_DIR="$DATA_ROOT/onp"
+# path only ever works on the ONE machine it was written for. Two
+# separate base directories now, not one, reflecting the current
+# layout: data/ and database/ are siblings of commerce-engine/ under
+# backend/, not nested inside it. COMMERCE_ENGINE_DIR (one level up
+# from this script's own location in shell/) finds common-lisp/;
+# BACKEND_DIR (one level further up again) finds data/. The exact
+# depth here is confirmed against common-lisp/retailers/catalogs.lisp's
+# own Example Retailer entry, which resolves "../../../data/..." relative
+# to retailers/ -- three levels up to backend/, consistent with two
+# levels up from shell/ (shell/ and retailers/ sit at different
+# nesting depths under commerce-engine/, but both correctly resolve
+# to the same backend/ root from their own respective locations).
+COMMERCE_ENGINE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+BACKEND_DIR="$(cd "$COMMERCE_ENGINE_DIR/.." && pwd)"
+DATA_ROOT="$BACKEND_DIR/data"
 ARCHIVE_ROOT="$DATA_ROOT/archive"    # one subdir per retailer, not nested inside each retailer's own dir
-LISP_DIR="$BASE_DIR/common-lisp"
-ONP_LISP_FILE="$LISP_DIR/retailers/onp/onp-db.lisp"
-CONVERTER_SCRIPT="$LISP_DIR/utilities/convert-ir-to-csv.lisp"
+LISP_DIR="$COMMERCE_ENGINE_DIR/common-lisp"
 CATALOGS_LISP="$LISP_DIR/retailers/catalogs.lisp"    # generic retailers -- see bottom of file
 
 
@@ -120,19 +130,31 @@ INFO_XML="$TMP_DIR/catalogs_info_file.xml"
 INFO_XML_CURRENT="$DATA_ROOT/catalogs_info_file.xml"
 INFO_XML_ARCHIVE_DIR="$ARCHIVE_ROOT/catalogs_info"
 
-mkdir -p "$INFO_XML_ARCHIVE_DIR"
-if [[ -f "$INFO_XML_CURRENT" ]]; then
-    if [[ "$SKIP_ARCHIVE" == "1" ]]; then
-        echo "Replacing previous catalogs_info_file.xml (SKIP_ARCHIVE set, not archiving)"
-    else
-        archive_name="$INFO_XML_ARCHIVE_DIR/$(date -r "$INFO_XML_CURRENT" '+%Y%m%d-%H%M%S')-catalogs_info_file.xml"
-        echo "Archiving previous catalogs_info_file.xml -> $archive_name"
-        mv "$INFO_XML_CURRENT" "$archive_name"
+# Only archive+replace when the content actually changed -- this
+# file, unlike a per-retailer catalog, carries no "last updated"
+# timestamp of its own to compare against, so a direct content diff
+# (cmp) is the right check here rather than the timestamp comparison
+# sync_catalog uses elsewhere. Without this check, every single run
+# archived a fresh copy unconditionally, even back-to-back runs
+# seconds apart with nothing actually different on Impact's end --
+# confirmed directly: two runs, two new archived files, real
+# duplicate accumulation for zero reason.
+if [[ -f "$INFO_XML_CURRENT" ]] && cmp -s "$INFO_XML" "$INFO_XML_CURRENT"; then
+    echo "catalogs_info_file.xml unchanged -- not archiving."
+else
+    mkdir -p "$INFO_XML_ARCHIVE_DIR"
+    if [[ -f "$INFO_XML_CURRENT" ]]; then
+        if [[ "$SKIP_ARCHIVE" == "1" ]]; then
+            echo "Replacing previous catalogs_info_file.xml (SKIP_ARCHIVE set, not archiving)"
+        else
+            archive_name="$INFO_XML_ARCHIVE_DIR/$(date -r "$INFO_XML_CURRENT" '+%Y%m%d-%H%M%S')-catalogs_info_file.xml"
+            echo "Archiving previous catalogs_info_file.xml -> $archive_name"
+            mv "$INFO_XML_CURRENT" "$archive_name"
+        fi
     fi
+    cp "$INFO_XML" "$INFO_XML_CURRENT"
+    echo "Installed current catalog metadata: $INFO_XML_CURRENT"
 fi
-
-cp "$INFO_XML" "$INFO_XML_CURRENT"
-echo "Installed current catalog metadata: $INFO_XML_CURRENT"
 
 ###############################################################################
 # sync_catalog : format-tag advertiser-id display-label local-dir local-basename archive-dir result-file -> writes
@@ -141,19 +163,18 @@ echo "Installed current catalog metadata: $INFO_XML_CURRENT"
 # Handles one <catalog> entry end to end: reads its <lastUpdated> and
 # <location> straight from the XML tree via xmllint. Matches on
 # advertiserId, not <name> -- <name> is presentation text and is NOT
-# guaranteed unique (SinoCrafted and Terra both show up as "Imported
-# Shopify Catalog" in this account's metadata). advertiserId is the
-# actual unique-per-merchant-program identifier. display_label is
-# separate, purely for readable log output. archive_dir is passed in
-# explicitly by the caller rather than read from a single global --
-# each retailer gets its own archive subdirectory, not a shared one.
+# guaranteed unique. advertiserId is the actual unique-per-merchant-
+# program identifier. display_label is separate, purely for readable
+# log output. archive_dir is passed in explicitly by the caller
+# rather than read from a single global -- each retailer gets its
+# own archive subdirectory, not a shared one.
 
 sync_catalog() {
     local format_tag="$1"
     local advertiser_id="$2"
     local display_label="$3"
     local local_dir="$4"
-    local local_basename="$5"    # e.g. Updated-ONP-Catalog_IR.txt.gz
+    local local_basename="$5"
     local archive_dir="$6"
     local result_file="$7"
 
@@ -246,149 +267,15 @@ EOF
 }
 
 ###############################################################################
-# CUSTOM RETAILERS -- retailers needing dedicated per-retailer parsing
-# (quantity-extraction heuristics, etc.), each with its own wrapper
-# file, rather than an entry in GENERIC_RETAILERS further down.
-# Currently just ONP. A second custom retailer gets its own
-# subsection here, following ONP's shape -- its own variables, its
-# own sync_catalog calls, its own if-block. Never touch ONP's
-# variables to add one; copy the pattern instead.
-###############################################################################
-
-# -----------------------------------------------------------------------
-# ONP
-# -----------------------------------------------------------------------
-# Google is kept current for human reference only; IR is what
-# onp-db.lisp actually reads. If ONP's IR catalog hasn't changed,
-# only ONP's own CSV/database steps are skipped below -- the script
-# keeps going into the generic retailers afterward regardless. This
-# used to be a full `exit 0`, which meant an unchanged ONP catalog
-# silently prevented every OTHER retailer from ever being checked --
-# exactly the kind of ONP-centrism that doesn't scale.
-
-ONP_GOOGLE_RESULT="$TMP_DIR/onp-google-updated"
-ONP_IR_RESULT="$TMP_DIR/onp-ir-updated"
-
-sync_catalog "GOOGLE TXT" "6955634" "ONP" \
-    "$ONP_DATA_DIR/google-format" \
-    "Updated-ONP-Catalog_GOOGLE_TXT.txt.gz" \
-    "$ARCHIVE_ROOT/onp" \
-    "$ONP_GOOGLE_RESULT"
-
-sync_catalog "IR" "6955634" "ONP" \
-    "$ONP_DATA_DIR/impact-format" \
-    "Updated-ONP-Catalog_IR.txt.gz" \
-    "$ARCHIVE_ROOT/onp" \
-    "$ONP_IR_RESULT"
-
-ONP_IR_UPDATED="$(cat "$ONP_IR_RESULT")"
-
-if [[ "$ONP_IR_UPDATED" == "1" ]]; then
-    ONP_IR_TXT="$ONP_DATA_DIR/impact-format/Updated-ONP-Catalog_IR.txt"
-    ONP_IR_CSV="$ONP_DATA_DIR/impact-format/Updated-ONP-Catalog_IR.csv"
-
-    # Human-readable CSV -- convenience only, NOT required by the
-    # database rebuild below, which reads the raw .txt directly. A
-    # failure here is a warning, not a hard stop.
-    #
-    # UNVERIFIED: the -- arg-passing syntax below is my best
-    # understanding of how ros forwards positional arguments through
-    # to a loaded script, but it hasn't been confirmed working the
-    # way the --eval-based calls below have. Low risk to test live --
-    # this whole step already degrades to a warning, not a failure,
-    # if it's wrong.
-    echo "[ONP] producing human-readable CSV..."
-    if ros --load "$CONVERTER_SCRIPT" -- "$ONP_IR_TXT" "$ONP_IR_CSV"; then
-        echo "[ONP] CSV written: $ONP_IR_CSV"
-    else
-        echo "[ONP] WARNING: CSV conversion failed -- continuing with database rebuild anyway."
-    fi
-
-    echo "[ONP] rebuilding database..."
-    cd "$LISP_DIR"
-    ros run \
-         --load "$ONP_LISP_FILE" \
-         --eval '(load-products-to-db *products*)' \
-         --quit
-
-    echo "[ONP] catalog update complete."
-else
-    echo "[ONP] IR catalog unchanged -- nothing for the database to pick up."
-fi
-
-###############################################################################
 # GENERIC RETAILERS -- no custom parsing needed. See the top of this
-# file for how to add one.
+# file for how to add one. Currently just one sample entry (Skin
+# Kins Co), kept specifically so this generic engine can be run and
+# tested end to end without a full catalog set populated first.
 ###############################################################################
 
 GENERIC_RETAILERS=(
     # advertiserId|display-label|local dir under data/|sbcl function to call
-    # advertiserId is the real, verified-unique identifier from
-    # catalogs_info_file.xml -- NOT <name>, which SinoCrafted and Terra
-    # both share ("Imported Shopify Catalog") and would collide on.
-    "7479390|SinoCrafted|sinocrafted|load-sinocrafted"
-    "7452908|Terra|terra|load-terra"
-    "7368301|ARCN Home|arcn-home|load-arcn-home"
-    "7599876|ANRAN|anran|load-anran"
-    "7650847|Dr. Jojo Vitamins|dr-jojo-vitamins|load-dr-jojo-vitamins"
-    "7430394|Varla|varla-amazon|load-varla-amazon"
-    "7167120|DOWAN|dowan|load-dowan"
-    "7225567|DNT Optics|dnt-optics|load-dnt-optics"
-    # --- batch added 2026-08-28 -- 44 retailers below.
-    # 11 of these have MORE THAN ONE catalog entry under the same
-    # advertiserId in Impact's metadata (multiple product-type or
-    # regional splits, same pattern GOLF Partner shows most visibly
-    # at 7 entries) -- sync_catalog's XPath only ever resolves to
-    # the FIRST matching entry for a given advertiserId, so these
-    # specific retailers will sync correctly but only capture ONE
-    # of their several files, not the full combined catalog. Not a
-    # crash, not silent data corruption -- just partial coverage.
-    # Flagged inline below on each one it applies to. Building real
-    # multi-file support (the Joom problem, at smaller scale) is a
-    # separate task, not done here.
-    "6675705|Margovil|margovil|load-margovil"
-    "98634|Venus Swim|venus-swim|load-venus-swim"
-    "7001503|Stuhrling Original|stuhrling-original|load-stuhrling-original"
-    "7033143|Whiskey Darling|whiskey-darling|load-whiskey-darling"  # MULTI-ENTRY, partial coverage -- see note above
-    "7450311|RVCA|rvca|load-rvca"
-    "3596386|GOLF Partner|golf-partner|load-golf-partner"  # MULTI-ENTRY, partial coverage -- see note above
-    "3565235|Brxl|brxl|load-brxl"
-    "7091135|ArtZ Miami|artz-miami|load-artz-miami"
-    "7114321|SELFWHO|selfwho|load-selfwho"
-    "7599035|Alorair|alorair|load-alorair"  # MULTI-ENTRY, partial coverage -- see note above
-    "7099710|Tetote Home|tetote-home|load-tetote-home"  # MULTI-ENTRY, partial coverage -- see note above
-    "6268289|Easecoo|easecoo|load-easecoo"
-    "4292131|RedTop|redtop|load-redtop"
-    "7388520|Magic John|magic-john|load-magic-john"
-    "7417719|Tuttiosport|tuttiosport|load-tuttiosport"
-    "5252685|Rave Sports|rave-sports|load-rave-sports"  # MULTI-ENTRY, partial coverage -- see note above
-    "7459432|Belela|belela|load-belela"  # MULTI-ENTRY, partial coverage -- see note above
-    "5432839|EGOHOME Mattress|egohome-mattress|load-egohome-mattress"
-    "7092833|OutIn|outin|load-outin"  # MULTI-ENTRY, partial coverage -- see note above
-    "7339666|AOOCCI International|aoocci-international|load-aoocci-international"  # MULTI-ENTRY, partial coverage -- see note above
-    "3195031|GoldClub Direct|goldclub-direct|load-goldclub-direct"
-    "7121451|Haoqiebike|haoqiebike|load-haoqiebike"
-    "7465628|Screaming O|screaming-o|load-screaming-o"  # MULTI-ENTRY, partial coverage -- see note above
-    "7356227|Tisscare|tisscare|load-tisscare"
-    "7422298|Plantifique|plantifique|load-plantifique"  # MULTI-ENTRY, partial coverage -- see note above
-    "4292160|Dreame Yardcare|dreame-yardcare|load-dreame-yardcare"  # MULTI-ENTRY, partial coverage -- see note above
-    "7348810|HK Beirui Trade|hk-beirui-trade|load-hk-beirui-trade"
-    "7446714|SunnyFeel|sunnyfeel|load-sunnyfeel"
-    "7332624|Upartner Technology|upartner-technology|load-upartner-technology"
-    "7400458|XTEINK|xteink|load-xteink"
-    "6897243|Jiehua International Trade|jiehua-international|load-jiehua-international"
-    "5428688|Fatboy Hair|fatboy-hair|load-fatboy-hair"
-    "3274582|Packed with Purpose|packed-with-purpose|load-packed-with-purpose"
-    "7371918|RunStar|runstar|load-runstar"
-    "7114959|Lilypad Paint|lilypad-paint|load-lilypad-paint"
-    "7364408|Aniioki eBikes|aniioki-ebikes|load-aniioki-ebikes"
-    "7193509|NuMe|nume|load-nume"
-    "7036290|Chef iQ|chef-iq|load-chef-iq"
-    "7510428|WiiM|wiim|load-wiim"
-    "7556796|Aigerri|aigerri|load-aigerri"
     "000000|Example Retailer|example-retailer|load-example-retailer"
-    "7151050|Smart Fuel|smart-fuel|load-smart-fuel"
-    "7500620|Signal Ring|signal-ring|load-signal-ring"
 )
 
 for entry in "${GENERIC_RETAILERS[@]}"; do
