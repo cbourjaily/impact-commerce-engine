@@ -11,12 +11,6 @@ affiliate feeds (Impact Radius format) into a local SQLite database.
    the sample retailer's catalog and loads it into
    `database/impact.db`.
 
-## Adding your own retailers
-
-See `commerce-engine/UPDATING-CATALOGS.txt` -- walks through
-adding a new retailer (with or without custom parsing) and adding a
-new field to the schema.
-
 ## Day-to-day operations
 
 See `commerce-engine/RUNBOOK.txt` -- running the full update,
