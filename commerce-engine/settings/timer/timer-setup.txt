@@ -1,1 +1,0 @@
-Did: mv update-onp.service ~/.config/systemd/user and mv update-onp.timer ~/.config/systemd/user
