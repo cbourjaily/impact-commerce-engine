@@ -62,20 +62,20 @@ SKIP_ARCHIVE="${SKIP_ARCHIVE:-0}"
 
 # Self-locating rather than a hardcoded absolute path -- a fixed
 # path only ever works on the ONE machine it was written for. Two
-# separate base directories now, not one, reflecting the current
-# layout: data/ and database/ are siblings of commerce-engine/ under
-# backend/, not nested inside it. COMMERCE_ENGINE_DIR (one level up
-# from this script's own location in shell/) finds common-lisp/;
-# BACKEND_DIR (one level further up again) finds data/. The exact
-# depth here is confirmed against common-lisp/retailers/catalogs.lisp's
-# own Example Retailer entry, which resolves "../../../data/..." relative
-# to retailers/ -- three levels up to backend/, consistent with two
-# levels up from shell/ (shell/ and retailers/ sit at different
-# nesting depths under commerce-engine/, but both correctly resolve
-# to the same backend/ root from their own respective locations).
+# separate base directories, not one: data/ and database/ are
+# siblings of commerce-engine/ at the repo root, not nested inside
+# it. COMMERCE_ENGINE_DIR (one level up from this script's own
+# location in shell/) finds common-lisp/; REPO_ROOT (one level
+# further up again) finds data/. The exact depth here is confirmed
+# against common-lisp/retailers/catalogs.lisp's own Example Retailer
+# entry, which resolves "../../../data/..." relative to retailers/
+# -- three levels up to the repo root, consistent with two levels up
+# from shell/ (shell/ and retailers/ sit at different nesting depths
+# under commerce-engine/, but both correctly resolve to the same
+# root from their own respective locations).
 COMMERCE_ENGINE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BACKEND_DIR="$(cd "$COMMERCE_ENGINE_DIR/.." && pwd)"
-DATA_ROOT="$BACKEND_DIR/data"
+REPO_ROOT="$(cd "$COMMERCE_ENGINE_DIR/.." && pwd)"
+DATA_ROOT="$REPO_ROOT/data"
 ARCHIVE_ROOT="$DATA_ROOT/archive"    # one subdir per retailer, not nested inside each retailer's own dir
 LISP_DIR="$COMMERCE_ENGINE_DIR/common-lisp"
 CATALOGS_LISP="$LISP_DIR/retailers/catalogs.lisp"    # generic retailers -- see bottom of file

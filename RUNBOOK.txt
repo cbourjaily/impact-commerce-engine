@@ -4,7 +4,7 @@ commerce-engine -- manual operation
 RUN EVERYTHING (download + load every retailer)
 ===============================================================================
 
-    cd backend/commerce-engine
+    cd commerce-engine
     bash shell/update-onp.sh
 
 Checks every retailer's catalog against Impact's metadata, downloads
@@ -82,7 +82,7 @@ new catalog you've dropped in manually (still gzipped, e.g. a new
 retailer's data/<name>/Imported-Shopify-Catalog_IR.txt.gz), extract
 it first:
 
-    cd backend/commerce-engine
+    cd commerce-engine
     gunzip -k data/<retailer-dir>/Imported-Shopify-Catalog_IR.txt.gz
 
     (-k keeps the .gz around instead of deleting it)

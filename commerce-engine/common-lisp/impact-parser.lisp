@@ -12,7 +12,7 @@ heuristics) or one retailer's file paths/name -- those stay in
 that retailer's own wrapper file, which calls into this one.
 
 Uses *common-lisp-dir* if already set by an entry file
-(catalogs.lisp/onp-db.lisp); falls back to self-locating if
+(catalogs.lisp or a retailer-specific wrapper file); falls back to self-locating if
 compiled/loaded standalone (e.g. C-c C-k in this buffer directly).
 |#
 
@@ -22,14 +22,13 @@ compiled/loaded standalone (e.g. C-c C-k in this buffer directly).
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (unless (boundp '*common-lisp-dir*)
-    ;; Not loaded as a dependency of catalogs.lisp/onp-db.lisp -- this
+    ;; Not loaded as a dependency of catalogs.lisp or a retailer wrapper --
     ;; file is being compiled/loaded directly (e.g. C-c C-k while
     ;; sitting in this buffer). Fall back to self-locating: this file
-    ;; lives in common-lisp/throughput/, so its parent is common-lisp/.
+    ;; lives directly in common-lisp/, so its own directory already
     (defparameter *common-lisp-dir*
-      (merge-pathnames "../"
-			(make-pathname :directory (pathname-directory
-						    (or *compile-file-truename* *load-truename*))))))
+      (make-pathname :directory (pathname-directory
+				  (or *compile-file-truename* *load-truename*)))))
   (load (merge-pathnames "product.lisp" *common-lisp-dir*)))
 
 
