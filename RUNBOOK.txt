@@ -56,13 +56,13 @@ Inside that prompt:
 ADD A NEW RETAILER
 ===============================================================================
 
-No custom parsing needed (most retailers):
+If no custom parsing needed (most retailers):
     1. See the "TO ADD A GENERIC RETAILER" comment at the top of
        shell/update-onp.sh.
     2. See the top comment in common-lisp/retailers/catalogs.lisp.
     Both together are the whole cost of onboarding one.
 
-Needs custom parsing (e.g. quantity extraction embedded in product
+If needs custom parsing (e.g. quantity extraction embedded in product
 names): give it its own wrapper file under
 common-lisp/retailers/<name>/<name>-db.lisp, plus its own
 sync_catalog call(s) in shell/update-onp.sh's CUSTOM RETAILERS
