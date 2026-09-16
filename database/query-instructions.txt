@@ -2,9 +2,9 @@
 Example queries, for reference
 ---------------------------------------------------------------
 
-Run these from the sqlite3 CLI (`sqlite3 onp.db`)
+Run these from the sqlite3 CLI (`sqlite3 impact.db`)
 or via sqlite:execute-to-list from Lisp.
- 
+
 All discounted products, biggest discount first:
 
   SELECT name, original_price, current_price, discount_percent
@@ -12,38 +12,38 @@ All discounted products, biggest discount first:
   WHERE discount IS NOT NULL
   ORDER BY discount_percent DESC
   LIMIT 20;
- 
+
 Count of products per manufacturer:
 
   SELECT manufacturer, COUNT(*) AS n
   FROM products
   GROUP BY manufacturer
   ORDER BY n DESC;
- 
+
 Average current price by category:
 
   SELECT category, AVG(current_price) AS avg_price
   FROM products
   GROUP BY category;
- 
-The same physical product (matched by mpn) as sold by more than
-one supplier, with each supplier's price -- self-joins the table
-against itself on mpn to find pairs of rows from different
-suppliers describing the same part:
 
-  SELECT a.mpn, a.supplier, a.current_price,
-         b.supplier, b.current_price
+The same physical product (matched by mpn) as sold by more than
+one retailer, with each retailer's price -- self-joins the table
+against itself on mpn to find pairs of rows from different
+retailers describing the same part:
+
+  SELECT a.mpn, a.retailer, a.current_price,
+         b.retailer, b.current_price
   FROM products a
-  JOIN products b ON a.mpn = b.mpn AND a.supplier < b.supplier
+  JOIN products b ON a.mpn = b.mpn AND a.retailer < b.retailer
   WHERE a.mpn IS NOT NULL AND a.mpn != '';
- 
+
 A product with all its images (joined on the surrogate id):
 
   SELECT p.name, i.alt_image_url, i.position
   FROM products p
   JOIN product_images i ON p.id = i.product_id
   WHERE p.id = 1;
- 
+
 Out-of-stock products:
 
-  SELECT name, sku, supplier FROM products WHERE available = 0;
+  SELECT name, sku, retailer FROM products WHERE available = 0;
