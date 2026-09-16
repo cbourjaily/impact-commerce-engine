@@ -4,7 +4,7 @@ commerce-engine -- manual operation
 RUN EVERYTHING (download + load every retailer)
 ===============================================================================
 
-    cd ~/git/misc/thuida/backend/commerce-engine
+    cd backend/commerce-engine
     bash shell/update-onp.sh
 
 Checks every retailer's catalog against Impact's metadata, downloads
@@ -21,20 +21,16 @@ Add -x for a full trace of every command (useful when debugging):
 RELOAD ONE RETAILER MANUALLY (no download, from whatever's on disk)
 ===============================================================================
 
-ONP (has its own quantity-extraction parsing):
-
-    sbcl --non-interactive \
-         --load common-lisp/retailers/onp/onp-db.lisp \
-         --eval '(load-products-to-db *products*)'
-
-Any generic retailer (SinoCrafted, Terra, or a new one added the same way):
-
     sbcl --non-interactive \
          --load common-lisp/retailers/catalogs.lisp \
-         --eval '(load-sinocrafted)'
+         --eval '(load-example-retailer)'
 
-    (swap load-sinocrafted for load-terra, or whatever load-* function
-    the new retailer defined)
+    (swap load-example-retailer for whatever load-* function a
+    retailer you've added defines)
+
+A retailer with its own custom parsing (its own wrapper file under
+common-lisp/retailers/<name>/<name>-db.lisp) is reloaded the same
+way -- load its file, call its own load-<name> function.
 
 
 ===============================================================================
@@ -50,7 +46,7 @@ Inside that prompt:
     .headers on
     .mode column                     -- both make query output readable
 
-    SELECT COUNT(*) FROM products WHERE retailer = 'Only Natural Pet';
+    SELECT COUNT(*) FROM products WHERE retailer = 'Example Retailer';
     SELECT name, current_price FROM products ORDER BY discount_percent DESC LIMIT 10;
 
     .quit                            -- or Ctrl-D
@@ -66,10 +62,11 @@ No custom parsing needed (most retailers):
     2. See the top comment in common-lisp/retailers/catalogs.lisp.
     Both together are the whole cost of onboarding one.
 
-Needs custom parsing (e.g. quantity extraction like ONP's):
-    Give it its own wrapper file, using
-    common-lisp/retailers/onp/onp-db.lisp as the template, plus its
-    own sync_catalog call(s) in shell/update-onp.sh near ONP's own.
+Needs custom parsing (e.g. quantity extraction embedded in product
+names): give it its own wrapper file under
+common-lisp/retailers/<name>/<name>-db.lisp, plus its own
+sync_catalog call(s) in shell/update-onp.sh's CUSTOM RETAILERS
+section. See UPDATING-CATALOGS.txt for the full walkthrough.
 
 
 ===============================================================================
@@ -85,7 +82,7 @@ new catalog you've dropped in manually (still gzipped, e.g. a new
 retailer's data/<name>/Imported-Shopify-Catalog_IR.txt.gz), extract
 it first:
 
-    cd ~/git/misc/thuida/backend/commerce-engine
+    cd backend/commerce-engine
     gunzip -k data/<retailer-dir>/Imported-Shopify-Catalog_IR.txt.gz
 
     (-k keeps the .gz around instead of deleting it)
@@ -96,12 +93,6 @@ Then, either way:
          path/to/Some-Catalog_IR.txt \
          path/to/output.csv
 
-Example, for the arcn-home catalog above:
-
-    sbcl --script common-lisp/utilities/convert-ir-to-csv.lisp \
-         data/arcn-home/Imported-Shopify-Catalog_IR.txt \
-         data/arcn-home/Imported-Shopify-Catalog_IR.csv
-
 
 ===============================================================================
 FILE LAYOUT
@@ -110,23 +101,21 @@ FILE LAYOUT
     common-lisp/
       db-builder.lisp              generic SQL-from-column-spec machinery
       product.lisp                 product struct + SQLite persistence
-      throughput/
-        impact-parser.lisp         generic Impact Radius (IR) format parsing
+      impact-parser.lisp           generic Impact Radius (IR) format parsing
       retailers/
         catalogs.lisp               generic retailers (no custom parsing)
-        onp/
-          onp-db.lisp               ONP -- has its own quantity-extraction parsing
+        <name>/
+          <name>-db.lisp            a retailer with its own custom parsing
       utilities/
         convert-ir-to-csv.lisp     manual CSV export, not used by the pipeline
+        new-retailers.lisp         diagnostic: list catalogs not yet onboarded
 
     data/
       catalogs_info_file.xml       current catalog metadata from Impact
       archive/
         catalogs_info/             archived old metadata snapshots
-        onp/  sinocrafted/  terra/   archived old catalog files, one dir per retailer
-      onp/impact-format/           ONP's current catalog files
-      sinocrafted/impact-format/   SinoCrafted's current catalog files
-      terra/impact-format/         Terra's current catalog files
+        <name>/                    archived old catalog files, one dir per retailer
+      <name>/impact-format/        each retailer's current catalog files
 
     database/
       impact.db                    the shared SQLite database -- every retailer
